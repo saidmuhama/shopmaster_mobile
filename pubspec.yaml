@@ -1,0 +1,77 @@
+name: shopmaster_mobile
+description: MDSPro — Owner mobile app for ShopMaster
+publish_to: 'none'
+version: 1.0.4+6
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP & networking
+  http: ^1.2.1
+  dio: ^5.4.3
+
+  # State management
+  provider: ^6.1.2
+
+  # Charts
+  fl_chart: ^0.68.0
+
+  # Storage
+  shared_preferences: ^2.2.3
+
+  # UI helpers
+  shimmer: ^3.0.0
+  cached_network_image: ^3.3.1
+  flutter_svg: ^2.0.10+1
+  lottie: ^3.1.2
+
+  # Utils
+  intl: ^0.19.0
+  timeago: ^3.6.1
+  url_launcher: ^6.2.6
+
+  # Fonts
+  google_fonts: ^6.2.1
+
+  # Icons
+  cupertino_icons: ^1.0.6
+  iconsax: ^0.0.8
+
+  # Receipt export & share
+  screenshot: ^3.0.0
+  share_plus: ^10.0.3
+  path_provider: ^2.1.4
+
+  # Notifications
+  flutter_local_notifications: ^17.2.4
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#0F2D1A"
+  adaptive_icon_foreground: "assets/images/app_icon_fg.png"
+  web:
+    generate: true
+    image_path: "assets/images/app_icon.png"
+    background_color: "#0F2D1A"
+    theme_color: "#0F2D1A"
+  min_sdk_android: 21
