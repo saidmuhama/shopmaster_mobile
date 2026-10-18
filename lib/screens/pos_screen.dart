@@ -87,14 +87,8 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
     setState(() {
       final idx = _cart.indexWhere((c) => c.product.id == p.id);
       if (idx >= 0) {
-        if (_cart[idx].quantity < p.qty) {
-          _cart[idx].quantity += 1;
-        } else {
-          _showSnack('Only ${p.qty.toStringAsFixed(0)} ${p.unit} in stock');
-          return;
-        }
+        _cart[idx].quantity += 1;
       } else {
-        if (!p.inStock) { _showSnack('Out of stock'); return; }
         _cart.add(CartItem(product: p));
       }
     });
@@ -536,16 +530,16 @@ class _ProductCardState extends State<_ProductCard>
         : 0.0;
 
     return GestureDetector(
-      onTapDown: outOfStock ? null : (_) {
+      onTapDown: (_) {
         setState(() => _pressed = true);
         _pressCtrl.forward();
       },
-      onTapUp: outOfStock ? null : (_) {
+      onTapUp: (_) {
         setState(() => _pressed = false);
         _pressCtrl.reverse();
         widget.onAdd();
       },
-      onTapCancel: outOfStock ? null : () {
+      onTapCancel: () {
         setState(() => _pressed = false);
         _pressCtrl.reverse();
       },
