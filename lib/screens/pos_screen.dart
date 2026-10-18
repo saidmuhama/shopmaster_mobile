@@ -750,14 +750,50 @@ class _CartSheetState extends State<_CartSheet> {
   String _payMethod = 'cash';
   bool _loading = false;
 
-  static const _methods = [
-    ('cash',      'Cash',          Icons.payments_rounded),
-    ('mpesa',     'M-Pesa',        Icons.phone_android_rounded),
-    ('tigopesa',  'Tigo Pesa',     Icons.phone_android_rounded),
-    ('airtel',    'Airtel',        Icons.phone_android_rounded),
-    ('bank',      'Bank',          Icons.account_balance_rounded),
-    ('credit',    'Credit',        Icons.credit_card_rounded),
+  // Dynamic — loaded from API; keyed as (slug, label, color)
+  List<(String, String, Color)> _methods = const [
+    ('cash',   'Cash',   Color(0xFF22c55e)),
+    ('mpesa',  'M-Pesa', Color(0xFFef4444)),
+    ('credit', 'Credit', Color(0xFFf59e0b)),
   ];
+
+  static Color _hexToColor(String hex) {
+    final h = hex.replaceAll('#', '');
+    if (h.length != 6) return const Color(0xFF6b7280);
+    return Color(int.parse('FF$h', radix: 16));
+  }
+
+  static IconData _iconFor(String slug) {
+    if (slug == 'cash')    return Icons.payments_rounded;
+    if (slug == 'bank' || slug == 'cheque') return Icons.account_balance_rounded;
+    if (slug == 'credit')  return Icons.credit_card_rounded;
+    if (slug == 'wallet')  return Icons.account_balance_wallet_rounded;
+    if (slug.contains('pesa') || slug.contains('airtel') || slug.contains('mpesa'))
+      return Icons.phone_android_rounded;
+    return Icons.payments_outlined;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _cashCtrl.text = _fmtMoney(_total);
+    _loadMethods();
+  }
+
+  Future<void> _loadMethods() async {
+    try {
+      final data = await ApiService.getPaymentMethods();
+      if (!mounted) return;
+      setState(() {
+        _methods = data.map((m) {
+          final slug  = (m['slug']  as String?) ?? 'cash';
+          final name  = (m['name']  as String?) ?? slug;
+          final color = _hexToColor((m['color'] as String?) ?? '#6b7280');
+          return (slug, name, color);
+        }).toList();
+      });
+    } catch (_) {}
+  }
 
   double get _subtotal => widget.cart.fold(0, (s, c) => s + c.total);
   double get _discount =>
@@ -771,12 +807,6 @@ class _CartSheetState extends State<_CartSheet> {
     if (_payMethod == 'cash') {
       _cashCtrl.text = _fmtMoney(_total);
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _cashCtrl.text = _fmtMoney(_total);
   }
 
   @override
@@ -961,7 +991,7 @@ class _CartSheetState extends State<_CartSheet> {
                 const SizedBox(height: 16),
                 _divider('Payment Method'),
                 const SizedBox(height: 10),
-                // Payment method grid
+                // Payment method grid — dynamic from tenant settings
                 GridView.count(
                   crossAxisCount: 3,
                   shrinkWrap: true,
@@ -970,36 +1000,34 @@ class _CartSheetState extends State<_CartSheet> {
                   mainAxisSpacing: 8,
                   childAspectRatio: 2.2,
                   children: _methods.map((entry) {
-                    final (id, label, icon) = entry;
-                    final sel = _payMethod == id;
+                    final (slug, label, color) = entry;
+                    final sel = _payMethod == slug;
                     return GestureDetector(
                       onTap: () => setState(() {
-                        _payMethod = id;
-                        if (id == 'cash') {
-                          _cashCtrl.text = _fmtMoney(_total);
-                        }
+                        _payMethod = slug;
+                        if (slug == 'cash') _cashCtrl.text = _fmtMoney(_total);
                       }),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
                         decoration: BoxDecoration(
-                          color: sel ? AppColors.primary : Colors.white,
+                          color: sel ? color : Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: sel
-                                ? AppColors.primary
-                                : AppColors.border,
+                            color: sel ? color : AppColors.border,
                             width: sel ? 1.5 : 1),
                           boxShadow: sel ? [BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.2),
+                            color: color.withValues(alpha: 0.25),
                             blurRadius: 8, offset: const Offset(0, 2))] : [],
                         ),
                         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Icon(icon, size: 13,
+                          Icon(_iconFor(slug), size: 13,
                             color: sel ? Colors.white : AppColors.textMuted),
                           const SizedBox(width: 5),
-                          Text(label, style: GoogleFonts.inter(
-                            fontSize: 11, fontWeight: FontWeight.w700,
-                            color: sel ? Colors.white : AppColors.textSecondary)),
+                          Flexible(child: Text(label,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 11, fontWeight: FontWeight.w700,
+                              color: sel ? Colors.white : AppColors.textSecondary))),
                         ]),
                       ),
                     );

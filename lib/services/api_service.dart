@@ -541,4 +541,29 @@ class ApiService {
     ).timeout(_timeout);
     return _decode(res);
   }
+
+  /// Returns [{slug, name, color, is_builtin}] — built-in enabled + custom methods.
+  /// Falls back to hardcoded defaults on any error.
+  static Future<List<Map<String, dynamic>>> getPaymentMethods() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/ajax/mobile/payment_methods.php'),
+        headers: _getHeaders,
+      ).timeout(_timeout);
+      final data = _decode(res);
+      if (data['ok'] == true && data['methods'] is List) {
+        return List<Map<String, dynamic>>.from(
+            (data['methods'] as List).map((e) => Map<String, dynamic>.from(e)));
+      }
+    } catch (_) {}
+    // Fallback defaults
+    return [
+      {'slug': 'cash',     'name': 'Cash',      'color': '#22c55e', 'is_builtin': true},
+      {'slug': 'mpesa',    'name': 'M-Pesa',    'color': '#ef4444', 'is_builtin': true},
+      {'slug': 'tigopesa', 'name': 'Tigo Pesa', 'color': '#3b82f6', 'is_builtin': true},
+      {'slug': 'airtel',   'name': 'Airtel',    'color': '#f97316', 'is_builtin': true},
+      {'slug': 'bank',     'name': 'Bank',      'color': '#6366f1', 'is_builtin': true},
+      {'slug': 'credit',   'name': 'Credit',    'color': '#f59e0b', 'is_builtin': true},
+    ];
+  }
 }
