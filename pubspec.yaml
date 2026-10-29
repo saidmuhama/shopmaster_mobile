@@ -1,7 +1,7 @@
 name: shopmaster_mobile
 description: MDSPro — Owner mobile app for ShopMaster
 publish_to: 'none'
-version: 1.0.6+10
+version: 1.0.17+29
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -41,12 +41,18 @@ dependencies:
   cupertino_icons: ^1.0.6
   iconsax: ^0.0.8
 
+  # Image picker
+  image_picker: ^1.1.2
+
   # Receipt export, share & print
   screenshot: ^3.0.0
   share_plus: ^10.0.3
   path_provider: ^2.1.4
   qr_flutter: ^4.1.0
   print_bluetooth_thermal: ^1.0.9
+
+  # In-app updates (Play Store silent/flexible update)
+  in_app_update: ^4.2.3
 
   # Notifications
   flutter_local_notifications: ^17.2.4

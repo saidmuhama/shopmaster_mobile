@@ -26,6 +26,17 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
     ),
   );
 
+  // Sync last_sale_id so the polling timer doesn't re-notify this same sale
+  final saleIdStr = message.data['sale_id'];
+  if (saleIdStr != null) {
+    final saleId = int.tryParse(saleIdStr);
+    if (saleId != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final current = prefs.getInt('last_sale_id') ?? 0;
+      if (saleId > current) await prefs.setInt('last_sale_id', saleId);
+    }
+  }
+
   await _showNotification(
     message.notification?.title ?? 'New Sale',
     message.notification?.body ?? '',
@@ -89,6 +100,17 @@ class NotificationService {
 
     // Foreground FCM messages → show as local notification
     FirebaseMessaging.onMessage.listen((msg) {
+      // Sync last_sale_id so the polling timer doesn't re-notify this same sale
+      final saleIdStr = msg.data['sale_id'];
+      if (saleIdStr != null) {
+        final saleId = int.tryParse(saleIdStr);
+        if (saleId != null) {
+          SharedPreferences.getInstance().then((prefs) {
+            final current = prefs.getInt('last_sale_id') ?? 0;
+            if (saleId > current) prefs.setInt('last_sale_id', saleId);
+          });
+        }
+      }
       _showNotification(
         msg.notification?.title ?? 'New Sale',
         msg.notification?.body ?? '',

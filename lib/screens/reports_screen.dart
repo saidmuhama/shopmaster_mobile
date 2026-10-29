@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/formatter.dart';
+import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -136,6 +137,30 @@ class _ReportsScreenState extends State<ReportsScreen>
     final cur = widget.user.currency;
     final profit = stats.monthRevenue - stats.monthExpenses;
     final fmt = NumberFormat('#,##0', 'en_US');
+    final resp = Responsive.of(context);
+
+    if (resp.isLargeTablet) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // PnL + Donut side-by-side
+        StaggeredItem(index: 0, controller: _listCtrl,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: 6,
+              child: _PnlCard(profit: profit, stats: stats, currency: cur, fmt: fmt)),
+            const SizedBox(width: 20),
+            Expanded(flex: 4,
+              child: _PremiumDonut(revenue: stats.monthRevenue,
+                expenses: stats.monthExpenses, currency: cur, fmt: fmt)),
+          ])),
+        const SizedBox(height: 20),
+        StaggeredItem(index: 1, controller: _listCtrl,
+          child: _KpiGrid(stats: stats, currency: cur, fmt: fmt)),
+        if (_chart.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          StaggeredItem(index: 2, controller: _listCtrl,
+            child: _PremiumLineChart(points: _chart, currency: cur)),
+        ],
+      ]);
+    }
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
@@ -315,6 +340,16 @@ class _KpiGrid extends StatelessWidget {
       _Kpi('Low Stock', '${stats.lowStockCount}', 'products',
         Icons.inventory_2_rounded, AppColors.danger, AppColors.dangerBg),
     ];
+
+    final resp = Responsive.of(context);
+    if (resp.isLargeTablet) {
+      return Row(children: [
+        for (int i = 0; i < tiles.length; i++) ...[
+          if (i > 0) const SizedBox(width: 12),
+          Expanded(child: _KpiTile(t: tiles[i])),
+        ],
+      ]);
+    }
 
     return Column(children: [
       Row(children: [

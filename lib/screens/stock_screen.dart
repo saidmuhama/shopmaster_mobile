@@ -1,13 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/pin_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/formatter.dart';
+import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
+import 'stock_adjustments_screen.dart';
 
 class StockScreen extends StatefulWidget {
   final bool lowStockOnly;
@@ -26,8 +30,10 @@ class _StockScreenState extends State<StockScreen>
   List<StockItem> _filtered = [];
   bool _loading = true;
   bool _searching = false;
+  String? _error;
   late AnimationController _listCtrl;
   AuthUser? _user;
+  String _branchName = '';
 
   @override
   void initState() {
@@ -43,7 +49,8 @@ class _StockScreenState extends State<StockScreen>
 
   void _onTabVisible() {
     final idx = widget.tabNotifier?.value;
-    if (idx == 3 || idx == 1) _load();
+    // idx 3 = owner layout stock tab, idx 2 = cashier layout stock tab
+    if (idx == 3 || idx == 2 || idx == 1) _load();
   }
 
   @override
@@ -57,22 +64,41 @@ class _StockScreenState extends State<StockScreen>
 
   Future<void> _loadUser() async {
     final u = await ApiService.getCachedUser();
-    if (mounted) setState(() => _user = u);
+    if (!mounted) return;
+    setState(() => _user = u);
+    if (u != null) {
+      try {
+        final branches = await ApiService.getBranches();
+        final branch = branches.firstWhere(
+          (b) => b.id == u.branchId,
+          orElse: () => branches.isNotEmpty ? branches.first : Branch(id: 0, name: '', code: '', isMain: false),
+        );
+        if (mounted) setState(() => _branchName = branch.name);
+      } catch (_) {}
+    }
   }
+
+  // Only owner / manager can edit product details
+  bool get _canEdit => _user != null && ['owner', 'manager'].contains(_user!.role);
 
   // All authenticated users can adjust stock and add products
   bool get _canAdjust => true;
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    final items = await ApiService.getStock();
-    if (!mounted) return;
-    setState(() {
-      _all      = items;
-      _filtered = items;
-      _loading  = false;
-    });
-    _listCtrl.forward(from: 0);
+    setState(() { _loading = true; _error = null; });
+    try {
+      final items = await ApiService.getStock();
+      if (!mounted) return;
+      setState(() {
+        _all      = items;
+        _filtered = items;
+        _loading  = false;
+      });
+      _listCtrl.forward(from: 0);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = 'Failed to load stock. Pull to refresh.'; });
+    }
   }
 
   void _onSearch(String q) {
@@ -177,6 +203,25 @@ class _StockScreenState extends State<StockScreen>
                       ],
                     ),
                   ),
+                  // Adjustments history button
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StockAdjustmentsScreen())),
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15)),
+                      ),
+                      child: const Icon(Icons.history_rounded,
+                        color: Colors.white, size: 20),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   // Search toggle
                   GestureDetector(
                     onTap: () {
@@ -333,7 +378,42 @@ class _StockScreenState extends State<StockScreen>
         Expanded(
           child: _loading
               ? _buildShimmer()
-              : TabBarView(
+              : _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Container(
+                            width: 72, height: 72,
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(20)),
+                            child: const Icon(Icons.wifi_off_rounded,
+                              size: 36, color: Colors.red)),
+                          const SizedBox(height: 14),
+                          Text('Connection Error',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16, fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary)),
+                          const SizedBox(height: 6),
+                          Text(_error!, textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 13, color: AppColors.textMuted)),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _load,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Retry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12))),
+                          ),
+                        ]),
+                      ),
+                    )
+                  : TabBarView(
                   controller: _tabs,
                   children: [
                     _StockList(
@@ -342,7 +422,9 @@ class _StockScreenState extends State<StockScreen>
                       emptyMsg: 'No products yet',
                       emptySubtitle: 'Tap "+ Add Product" to add your first product',
                       canAdjust: _canAdjust,
-                      onAdjust: _showAdjustSheet),
+                      canEdit: _canEdit,
+                      onAdjust: _showAdjustSheet,
+                      onEdit: _showEditSheet),
                     _StockList(
                       items: _lowStock,
                       listCtrl: _listCtrl,
@@ -350,11 +432,40 @@ class _StockScreenState extends State<StockScreen>
                       emptySubtitle: 'No low stock or out-of-stock items',
                       emptyIcon: Icons.check_circle_outline_rounded,
                       canAdjust: _canAdjust,
-                      onAdjust: _showAdjustSheet),
+                      canEdit: _canEdit,
+                      onAdjust: _showAdjustSheet,
+                      onEdit: _showEditSheet),
                   ],
                 ),
         ),
       ]),
+    );
+  }
+
+  void _showEditSheet(StockItem item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditProductSheet(
+        initialItem: item,
+        allItems: _all,
+        branchName: _branchName,
+        onSaved: () {
+          _load();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Product updated!',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600, color: Colors.white)),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -432,7 +543,9 @@ class _StockList extends StatelessWidget {
   final String emptyMsg, emptySubtitle;
   final IconData emptyIcon;
   final bool canAdjust;
+  final bool canEdit;
   final void Function(StockItem)? onAdjust;
+  final void Function(StockItem)? onEdit;
 
   const _StockList({
     required this.items,
@@ -441,7 +554,9 @@ class _StockList extends StatelessWidget {
     required this.emptySubtitle,
     this.emptyIcon = Icons.inventory_2_outlined,
     this.canAdjust = false,
+    this.canEdit = false,
     this.onAdjust,
+    this.onEdit,
   });
 
   @override
@@ -449,6 +564,28 @@ class _StockList extends StatelessWidget {
     if (items.isEmpty) {
       return EmptyState(
         title: emptyMsg, subtitle: emptySubtitle, icon: emptyIcon);
+    }
+    final resp = Responsive.of(context);
+    if (resp.isTablet) {
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: resp.isLargeTablet ? 3 : 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.55,
+        ),
+        itemCount: items.length,
+        itemBuilder: (_, i) => StaggeredItem(
+          index: i,
+          controller: listCtrl,
+          child: _StockCard(
+            item: items[i],
+            onAdjust: canAdjust ? () => onAdjust?.call(items[i]) : null,
+            onEdit: canEdit ? () => onEdit?.call(items[i]) : null,
+          ),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
@@ -459,6 +596,7 @@ class _StockList extends StatelessWidget {
         child: _StockCard(
           item: items[i],
           onAdjust: canAdjust ? () => onAdjust?.call(items[i]) : null,
+          onEdit: canEdit ? () => onEdit?.call(items[i]) : null,
         ),
       ),
     );
@@ -469,7 +607,8 @@ class _StockList extends StatelessWidget {
 class _StockCard extends StatelessWidget {
   final StockItem item;
   final VoidCallback? onAdjust;
-  const _StockCard({required this.item, this.onAdjust});
+  final VoidCallback? onEdit;
+  const _StockCard({required this.item, this.onAdjust, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -567,7 +706,7 @@ class _StockCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(Fmt.num(item.qty),
+                  Text(Fmt.qty(item.qty),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 22, fontWeight: FontWeight.w900,
                       color: barColor, letterSpacing: -0.6)),
@@ -598,7 +737,7 @@ class _StockCard extends StatelessWidget {
           child: Row(children: [
             Icon(Icons.refresh_rounded, size: 11, color: AppColors.textMuted),
             const SizedBox(width: 4),
-            Text('Reorder @ ${Fmt.num(item.reorderLevel)} ${item.unit}',
+            Text('Reorder @ ${Fmt.qty(item.reorderLevel)} ${item.unit}',
               style: GoogleFonts.inter(
                 fontSize: 11, fontWeight: FontWeight.w600,
                 color: AppColors.textMuted)),
@@ -610,38 +749,61 @@ class _StockCard extends StatelessWidget {
           ]),
         ),
 
-        // ── Adjust button ─────────────────────────────────────────────────
-        if (onAdjust != null)
+        // ── Action buttons ─────────────────────────────────────────────────
+        if (onAdjust != null || onEdit != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: GestureDetector(
-              onTap: onAdjust,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.07),
-                      AppColors.primaryMid.withValues(alpha: 0.04),
-                    ]),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.15)),
+            child: Row(children: [
+              if (onAdjust != null)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onAdjust,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          AppColors.primary.withValues(alpha: 0.07),
+                          AppColors.primaryMid.withValues(alpha: 0.04),
+                        ]),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.15))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.tune_rounded, color: AppColors.primary, size: 14),
+                        const SizedBox(width: 6),
+                        Text('Adjust Stock',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12, fontWeight: FontWeight.w800,
+                            color: AppColors.primary)),
+                      ]),
+                    ),
+                  ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.tune_rounded, color: AppColors.primary, size: 14),
-                    const SizedBox(width: 6),
-                    Text('Adjust Stock',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12, fontWeight: FontWeight.w800,
-                        color: AppColors.primary)),
-                  ],
+              if (onAdjust != null && onEdit != null)
+                const SizedBox(width: 8),
+              if (onEdit != null)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onEdit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.accent.withValues(alpha: 0.25))),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.edit_rounded, color: AppColors.accent, size: 14),
+                        const SizedBox(width: 6),
+                        Text('Edit Details',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12, fontWeight: FontWeight.w800,
+                            color: AppColors.accent)),
+                      ]),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+            ]),
           )
         else
           const SizedBox(height: 14),
@@ -752,19 +914,22 @@ class _AnimatedBarState extends State<_AnimatedBar>
 
 // ── Product draft model ───────────────────────────────────────────────────────
 class _ProductDraft {
-  final TextEditingController name    = TextEditingController();
-  final TextEditingController sku     = TextEditingController();
-  final TextEditingController buy     = TextEditingController();
-  final TextEditingController sell    = TextEditingController();
-  final TextEditingController qty     = TextEditingController();
-  final TextEditingController reorder = TextEditingController();
+  final TextEditingController name      = TextEditingController();
+  final TextEditingController sku       = TextEditingController();
+  final TextEditingController buy       = TextEditingController();
+  final TextEditingController sell      = TextEditingController();
+  final TextEditingController wholesale = TextEditingController();
+  final TextEditingController minWsQty  = TextEditingController();
+  final TextEditingController qty       = TextEditingController();
+  final TextEditingController reorder   = TextEditingController();
   String unit     = 'pcs';
   int?   categoryId;
   bool   expanded = true;
 
   void dispose() {
     name.dispose(); sku.dispose(); buy.dispose();
-    sell.dispose(); qty.dispose(); reorder.dispose();
+    sell.dispose(); wholesale.dispose(); minWsQty.dispose();
+    qty.dispose(); reorder.dispose();
   }
 
   String get summaryName => name.text.trim().isEmpty ? 'Unnamed product' : name.text.trim();
@@ -787,6 +952,7 @@ class _AddProductSheetState extends State<_AddProductSheet> {
   bool    _saving  = false;
   bool    _loading = true;
   String? _error;
+  File?   _pickedImage;
 
   static const _units = ['pcs', 'kg', 'g', 'ltr', 'ml', 'box', 'carton',
                           'dozen', 'pair', 'roll', 'bag', 'packet'];
@@ -836,6 +1002,86 @@ class _AddProductSheetState extends State<_AddProductSheet> {
     return true;
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(2))),
+          Text('Add Product Image', style: GoogleFonts.plusJakartaSans(
+            fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B))),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25))),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 28),
+                    const SizedBox(height: 6),
+                    Text('Camera', style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.35))),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.photo_library_rounded, color: AppColors.accentDark, size: 28),
+                    const SizedBox(height: 6),
+                    Text('Gallery', style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accentDark)),
+                  ]),
+                ),
+              ),
+            ),
+          ]),
+          if (_pickedImage != null) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () { setState(() => _pickedImage = null); Navigator.pop(ctx); },
+              child: Text('Remove image', style: GoogleFonts.inter(
+                fontSize: 12, color: AppColors.danger, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ]),
+      ),
+    );
+    if (source == null) return;
+    try {
+      final xf = await picker.pickImage(
+        source: source, maxWidth: 1200, maxHeight: 1200, imageQuality: 85);
+      if (xf != null && mounted) {
+        setState(() => _pickedImage = File(xf.path));
+      }
+    } catch (_) {}
+  }
+
   Future<bool> _confirmPin() async {
     final hasPin = await PinService.hasPin();
     if (!hasPin) return true;
@@ -856,29 +1102,33 @@ class _AddProductSheetState extends State<_AddProductSheet> {
     setState(() => _saving = true);
     try {
       final products = _drafts.map((d) => <String, dynamic>{
-        'name':          d.name.text.trim(),
-        'sku':           d.sku.text.trim(),
-        'unit':          d.unit,
-        'category_id':   d.categoryId?.toString() ?? '',
-        'buying_price':  double.tryParse(d.buy.text.trim())    ?? 0,
-        'selling_price': double.tryParse(d.sell.text.trim())   ?? 0,
-        'qty':           double.tryParse(d.qty.text.trim())    ?? 0,
-        'reorder_level': double.tryParse(d.reorder.text.trim()) ?? 0,
+        'name':              d.name.text.trim(),
+        'sku':               d.sku.text.trim(),
+        'unit':              d.unit,
+        'category_id':       d.categoryId?.toString() ?? '',
+        'buying_price':      double.tryParse(d.buy.text.trim())       ?? 0,
+        'selling_price':     double.tryParse(d.sell.text.trim())      ?? 0,
+        'wholesale_price':   double.tryParse(d.wholesale.text.trim()) ?? 0,
+        'min_wholesale_qty': double.tryParse(d.minWsQty.text.trim())  ?? 0,
+        'qty':               double.tryParse(d.qty.text.trim())       ?? 0,
+        'reorder_level':     double.tryParse(d.reorder.text.trim())   ?? 0,
       }).toList();
 
       Map<String, dynamic> res;
       if (products.length == 1) {
         final p = products.first;
         res = await ApiService.addProduct(
-          name:         p['name'] as String,
-          sku:          p['sku']  as String,
-          unit:         p['unit'] as String,
-          categoryId:   (p['category_id'] as String).isEmpty
-                            ? null : int.tryParse(p['category_id'] as String),
-          buyingPrice:  (p['buying_price']  as num).toDouble(),
-          sellingPrice: (p['selling_price'] as num).toDouble(),
-          qty:          (p['qty']           as num).toDouble(),
-          reorderLevel: (p['reorder_level'] as num).toDouble(),
+          name:             p['name'] as String,
+          sku:              p['sku']  as String,
+          unit:             p['unit'] as String,
+          categoryId:       (p['category_id'] as String).isEmpty
+                                ? null : int.tryParse(p['category_id'] as String),
+          buyingPrice:      (p['buying_price']      as num).toDouble(),
+          sellingPrice:     (p['selling_price']     as num).toDouble(),
+          wholesalePrice:   (p['wholesale_price']   as num).toDouble(),
+          minWholesaleQty:  (p['min_wholesale_qty'] as num).toDouble(),
+          qty:              (p['qty']               as num).toDouble(),
+          reorderLevel:     (p['reorder_level']     as num).toDouble(),
         );
       } else {
         res = await ApiService.bulkAddProducts(products);
@@ -886,6 +1136,17 @@ class _AddProductSheetState extends State<_AddProductSheet> {
 
       if (!mounted) return;
       if (res['ok'] == true) {
+        // Upload image for single-product adds if one was picked
+        if (_pickedImage != null && products.length == 1) {
+          final productId = res['product_id'] as int? ?? 0;
+          if (productId > 0) {
+            try {
+              await ApiService.uploadProductImage(
+                productId: productId, imageFile: _pickedImage!);
+            } catch (_) {}
+          }
+        }
+        if (!mounted) return;
         HapticFeedback.heavyImpact();
         Navigator.pop(context);
         widget.onSaved();
@@ -1033,6 +1294,63 @@ class _AddProductSheetState extends State<_AddProductSheet> {
                     fontSize: 13, fontWeight: FontWeight.w600,
                     color: AppColors.danger))),
               ])),
+
+          // Image picker (single-product mode only)
+          if (count == 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: GestureDetector(
+                onTap: _pickImage,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _pickedImage != null
+                        ? const Color(0xFFF0FDF4)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _pickedImage != null
+                          ? AppColors.primary.withValues(alpha: 0.4)
+                          : const Color(0xFFCBD5E1))),
+                  child: Row(children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: _pickedImage != null
+                          ? Image.file(_pickedImage!, width: 40, height: 40, fit: BoxFit.cover)
+                          : Container(
+                              width: 40, height: 40,
+                              color: const Color(0xFFE2E8F0),
+                              child: const Icon(Icons.add_photo_alternate_outlined,
+                                size: 20, color: Color(0xFF94A3B8))),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min, children: [
+                        Text(
+                          _pickedImage != null ? 'Image selected' : 'Add product image',
+                          style: GoogleFonts.inter(
+                            fontSize: 13, fontWeight: FontWeight.w700,
+                            color: _pickedImage != null
+                                ? AppColors.primary : const Color(0xFF475569))),
+                        Text(
+                          _pickedImage != null ? 'Tap to change' : 'Optional · camera or gallery',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, color: const Color(0xFF94A3B8))),
+                      ]),
+                    ),
+                    if (_pickedImage != null)
+                      GestureDetector(
+                        onTap: () => setState(() => _pickedImage = null),
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Icon(Icons.close_rounded, size: 16, color: Color(0xFF94A3B8)))),
+                  ]),
+                ),
+              ),
+            ),
 
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -1215,16 +1533,31 @@ class _DraftFormState extends State<_DraftForm> {
             icon: Icons.arrow_upward_rounded,
             keyboardType: TextInputType.number, prefix: 'Sell ')),
         ]),
+        const SizedBox(height: 10),
+        _FLabel('Wholesale Pricing (optional)'), const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: _FField(controller: d.wholesale, hint: 'Wholesale price',
+            icon: Icons.local_offer_outlined,
+            keyboardType: TextInputType.number, prefix: 'WS   ')),
+          const SizedBox(width: 8),
+          Expanded(child: _FField(controller: d.minWsQty, hint: 'Min qty',
+            icon: Icons.numbers_rounded,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true), prefix: 'Min  ')),
+        ]),
+        const SizedBox(height: 5),
+        Text('Wholesale activates when qty ≥ min (leave blank to skip)',
+          style: GoogleFonts.inter(
+            fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
         const SizedBox(height: 12),
         _FLabel('Opening Stock'), const SizedBox(height: 5),
         Row(children: [
           Expanded(child: _FField(controller: d.qty, hint: '0',
             icon: Icons.add_shopping_cart_rounded,
-            keyboardType: TextInputType.number, prefix: 'Qty  ')),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true), prefix: 'Qty  ')),
           const SizedBox(width: 8),
           Expanded(child: _FField(controller: d.reorder, hint: '0',
             icon: Icons.notifications_active_rounded,
-            keyboardType: TextInputType.number, prefix: 'Alert')),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true), prefix: 'Alert')),
         ]),
         const SizedBox(height: 5),
         Text('Alert level triggers Low Stock warning',
@@ -1284,6 +1617,9 @@ class _FField extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           textCapitalization: textCapitalization,
+          inputFormatters: keyboardType != null
+              ? [FilteringTextInputFormatter.deny(RegExp(r'[-]'))]
+              : null,
           style: GoogleFonts.inter(
             fontSize: 14, fontWeight: FontWeight.w600,
             color: AppColors.textPrimary),
@@ -1390,13 +1726,17 @@ class _AdjustSheet extends StatefulWidget {
   State<_AdjustSheet> createState() => _AdjustSheetState();
 }
 
-class _AdjustSheetState extends State<_AdjustSheet> {
+class _AdjustSheetState extends State<_AdjustSheet>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   final _qtyCtrl   = TextEditingController();
   final _notesCtrl = TextEditingController();
   String  _type    = 'add';
   String  _reason  = 'Correction';
   bool    _saving  = false;
   String? _errorMsg;
+  List<Map<String, dynamic>> _history = [];
+  bool _histLoading = true;
 
   static const _reasons = [
     'Correction', 'Purchase', 'Return', 'Damage', 'Expired',
@@ -1404,7 +1744,25 @@ class _AdjustSheetState extends State<_AdjustSheet> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final rows = await ApiService.getStockMovements(
+          productId: widget.item.id, limit: 30);
+      if (mounted) setState(() { _history = rows; _histLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _histLoading = false);
+    }
+  }
+
+  @override
   void dispose() {
+    _tabs.dispose();
     _qtyCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -1435,9 +1793,9 @@ class _AdjustSheetState extends State<_AdjustSheet> {
 
   Future<void> _save() async {
     final q = _qtyVal;
-    if (_qtyCtrl.text.trim().isEmpty || (q <= 0 && _type != 'set')) {
+    if (_qtyCtrl.text.trim().isEmpty || q < 0 || (q <= 0 && _type != 'set')) {
       HapticFeedback.vibrate();
-      setState(() => _errorMsg = 'Enter a valid quantity');
+      setState(() => _errorMsg = q < 0 ? 'Quantity cannot be negative' : 'Enter a valid quantity');
       return;
     }
     final hasPin = await PinService.hasPin();
@@ -1457,10 +1815,27 @@ class _AdjustSheetState extends State<_AdjustSheet> {
       if (!mounted) return;
       if (res['ok'] == true) {
         HapticFeedback.heavyImpact();
-        final newQty = double.tryParse(res['new_qty']?.toString() ?? '') ??
-            _computePreview(_qtyCtrl.text);
-        widget.onSaved(newQty);
-        Navigator.pop(context);
+        if (res['pending'] == true) {
+          // Cashier/stock_manager — queued for approval, stock not changed yet
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Row(children: [
+              const Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('Submitted for manager approval',
+                style: TextStyle(fontWeight: FontWeight.w600))),
+            ]),
+            backgroundColor: const Color(0xFFF59E0B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
+          ));
+        } else {
+          final newQty = double.tryParse(res['new_qty']?.toString() ?? '') ??
+              _computePreview(_qtyCtrl.text);
+          widget.onSaved(newQty);
+          Navigator.pop(context);
+        }
       } else {
         setState(() { _saving = false; _errorMsg = res['error']?.toString() ?? 'Adjustment failed'; });
       }
@@ -1547,6 +1922,28 @@ class _AdjustSheetState extends State<_AdjustSheet> {
     }
   }
 
+  static Color _mvTypeColor(String type) {
+    switch (type) {
+      case 'purchase':     return const Color(0xFF15803d);
+      case 'sale':         return const Color(0xFFb91c1c);
+      case 'adjustment':   return const Color(0xFF1d4ed8);
+      case 'return':       return const Color(0xFFb45309);
+      case 'transfer_in':  return const Color(0xFF0e7490);
+      case 'transfer_out': return const Color(0xFF6b7280);
+      default:             return const Color(0xFF6b7280);
+    }
+  }
+
+  static String _fmtDate(String iso) {
+    if (iso.length < 10) return iso;
+    try {
+      final d = DateTime.parse(iso);
+      const months = ['','Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '${d.day} ${months[d.month]}';
+    } catch (_) { return iso.substring(0, 10); }
+  }
+
   @override
   Widget build(BuildContext context) {
     final item      = widget.item;
@@ -1556,23 +1953,90 @@ class _AdjustSheetState extends State<_AdjustSheet> {
         ? AppColors.danger : isLow ? AppColors.warning : AppColors.success;
     final typeColor = _type == 'add'
         ? AppColors.success : _type == 'remove' ? AppColors.danger : AppColors.accent;
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40, height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.92,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      child: Column(children: [
+        // ── Dark header: handle + product card + tab bar ───────────────────
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF061410), AppColors.primary, Color(0xFF163522)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          child: Column(children: [
+            Center(child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 14),
+            // Product card (compact)
+            Row(children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.inventory_2_rounded,
+                  color: Colors.white, size: 20)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(item.name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15, fontWeight: FontWeight.w900,
+                    color: Colors.white)),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: statColor.withValues(alpha: 0.4))),
+                  child: Text('${Fmt.qty(item.qty)} ${item.unit}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11, fontWeight: FontWeight.w800,
+                      color: statColor))),
+              ])),
+            ]),
+            const SizedBox(height: 14),
+            // Tab bar
+            TabBar(
+              controller: _tabs,
+              indicatorColor: AppColors.accent,
+              indicatorWeight: 2.5,
+              labelColor: AppColors.accent,
+              unselectedLabelColor: Colors.white.withValues(alpha: 0.45),
+              labelStyle: GoogleFonts.plusJakartaSans(
+                fontSize: 12, fontWeight: FontWeight.w800),
+              unselectedLabelStyle: GoogleFonts.inter(
+                fontSize: 12, fontWeight: FontWeight.w500),
+              tabs: const [
+                Tab(text: 'Adjust'),
+                Tab(text: 'History'),
+              ],
+            ),
+          ]),
+        ),
 
+        // ── Tab views ─────────────────────────────────────────────────────
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: [
+
+        // ═══ Tab 0: Adjust ════════════════════════════════════════════════
+        Column(children: [
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, bottom > 0 ? bottom : 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1611,7 +2075,7 @@ class _AdjustSheetState extends State<_AdjustSheet> {
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: statColor.withValues(alpha: 0.4))),
-                              child: Text('${Fmt.num(item.qty)} ${item.unit}',
+                              child: Text('${Fmt.qty(item.qty)} ${item.unit}',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 12, fontWeight: FontWeight.w800,
                                   color: statColor))),
@@ -1620,33 +2084,107 @@ class _AdjustSheetState extends State<_AdjustSheet> {
 
                   const SizedBox(height: 20),
 
+                  // Correction helper banner
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.12))),
+                    child: Row(children: [
+                      Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(9)),
+                        child: const Icon(Icons.inventory_2_outlined,
+                          size: 16, color: AppColors.primary)),
+                      const SizedBox(width: 10),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('CURRENT STOCK',
+                          style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w800,
+                            color: AppColors.primary.withValues(alpha: 0.6),
+                            letterSpacing: 0.5)),
+                        Text('${Fmt.qty(item.qty)} ${item.unit}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14, fontWeight: FontWeight.w900,
+                            color: AppColors.primary)),
+                      ]),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _type = 'set';
+                          _qtyCtrl.text = item.qty == item.qty.toInt()
+                              ? item.qty.toInt().toString()
+                              : item.qty.toString();
+                          _reason = 'Correction';
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.accent.withValues(alpha: 0.3))),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.edit_rounded,
+                              size: 11, color: AppColors.accent),
+                            const SizedBox(width: 4),
+                            Text('Correct entry',
+                              style: GoogleFonts.inter(
+                                fontSize: 10, fontWeight: FontWeight.w800,
+                                color: AppColors.accent)),
+                          ]),
+                        ),
+                      ),
+                    ]),
+                  ),
+
+                  const SizedBox(height: 18),
                   _FLabel('Adjustment Type'),
                   const SizedBox(height: 8),
                   Row(children: [
                     _TypeBtn(label: 'Add',    icon: Icons.add_circle_outline_rounded,
                       color: AppColors.success, selected: _type == 'add',
-                      onTap: () => setState(() => _type = 'add')),
+                      onTap: () => setState(() { _type = 'add'; _qtyCtrl.clear(); })),
                     const SizedBox(width: 8),
                     _TypeBtn(label: 'Remove', icon: Icons.remove_circle_outline_rounded,
                       color: AppColors.danger,  selected: _type == 'remove',
-                      onTap: () => setState(() => _type = 'remove')),
+                      onTap: () => setState(() { _type = 'remove'; _qtyCtrl.clear(); })),
                     const SizedBox(width: 8),
                     _TypeBtn(label: 'Set to', icon: Icons.edit_note_rounded,
                       color: AppColors.accent,  selected: _type == 'set',
-                      onTap: () => setState(() => _type = 'set')),
+                      onTap: () => setState(() {
+                        _type = 'set';
+                        if (_qtyCtrl.text.trim().isEmpty) {
+                          _qtyCtrl.text = item.qty == item.qty.toInt()
+                              ? item.qty.toInt().toString()
+                              : item.qty.toString();
+                        }
+                      })),
                   ]),
+                  if (_type == 'set')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('Set to exact quantity — use this to correct a wrong entry',
+                        style: GoogleFonts.inter(
+                          fontSize: 10, fontWeight: FontWeight.w500,
+                          color: AppColors.accent.withValues(alpha: 0.8)))),
 
                   const SizedBox(height: 18),
-                  _FLabel('Quantity'),
+                  _FLabel(_type == 'set' ? 'Correct Quantity' : 'Quantity'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _qtyCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[-]'))],
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 20, fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary),
                     decoration: InputDecoration(
-                      hintText: '0',
+                      hintText: _type == 'set' ? '${item.qty}' : '0',
                       hintStyle: TextStyle(color: AppColors.textMuted),
                       suffixText: item.unit,
                       suffixStyle: GoogleFonts.inter(
@@ -1688,7 +2226,7 @@ class _AdjustSheetState extends State<_AdjustSheet> {
                               style: GoogleFonts.inter(
                                 fontSize: 12, color: AppColors.textMuted,
                                 fontWeight: FontWeight.w500)),
-                            Text('${Fmt.num(preview)} ${item.unit}',
+                            Text('${Fmt.qty(preview)} ${item.unit}',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 14, fontWeight: FontWeight.w900,
                                 color: typeColor)),
@@ -1805,9 +2343,127 @@ class _AdjustSheetState extends State<_AdjustSheet> {
               ),
             ),
           ),
-        ]),
-      ),
-    );
+        ]), // end Tab 0 Column
+
+        // ═══ Tab 1: History ═══════════════════════════════════════════════
+        _histLoading
+            ? const Center(child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppColors.primary))
+            : _history.isEmpty
+                ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.history_rounded, size: 40, color: AppColors.borderLight),
+                    const SizedBox(height: 10),
+                    Text('No adjustment history',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14, fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted)),
+                  ]))
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    itemCount: _history.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final m     = _history[i];
+                      final col   = _mvTypeColor(m['type'] as String? ?? '');
+                      final before = (m['before_qty'] as num).toDouble();
+                      final after  = (m['after_qty']  as num).toDouble();
+                      final delta  = after - before;
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: AppShadows.sm),
+                        child: Row(children: [
+                          Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: col.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: col.withValues(alpha: 0.25))),
+                            child: Icon(
+                              delta >= 0
+                                  ? Icons.arrow_upward_rounded
+                                  : Icons.arrow_downward_rounded,
+                              size: 16, color: col)),
+                          const SizedBox(width: 10),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: col.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6)),
+                                child: Text(
+                                  (m['type'] as String? ?? '')
+                                      .replaceAll('_', ' ').toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8, fontWeight: FontWeight.w800,
+                                    color: col))),
+                              const SizedBox(width: 6),
+                              Flexible(child: Text(
+                                m['branch_name'] as String? ?? '—',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10, fontWeight: FontWeight.w600,
+                                  color: AppColors.textMuted))),
+                            ]),
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              Text(Fmt.qty(before),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13, fontWeight: FontWeight.w700,
+                                  color: AppColors.textMuted)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 5),
+                                child: Icon(Icons.arrow_forward_rounded,
+                                  size: 13, color: AppColors.textMuted)),
+                              Text(Fmt.qty(after),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13, fontWeight: FontWeight.w900,
+                                  color: AppColors.primary)),
+                              const Spacer(),
+                              Text(
+                                '${delta >= 0 ? '+' : ''}${Fmt.qty(delta.abs())}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14, fontWeight: FontWeight.w900,
+                                  color: delta >= 0
+                                      ? AppColors.success
+                                      : AppColors.danger)),
+                            ]),
+                            if ((m['note'] as String?)?.isNotEmpty == true) ...[
+                              const SizedBox(height: 3),
+                              Text(m['note'] as String,
+                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11, color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w500)),
+                            ],
+                          ])),
+                          const SizedBox(width: 8),
+                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Text(_fmtDate(m['created_at'] as String? ?? ''),
+                              style: GoogleFonts.inter(
+                                fontSize: 10, color: AppColors.textMuted,
+                                fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 2),
+                            Text(m['adjusted_by'] as String? ?? '—',
+                              style: GoogleFonts.inter(
+                                fontSize: 10, fontWeight: FontWeight.w700,
+                                color: AppColors.primary)),
+                          ]),
+                        ]),
+                      );
+                    }),
+
+            ], // end TabBarView children
+          ), // end TabBarView
+        ), // end Expanded
+      ]), // end outer Column
+    ); // end Container
   }
 }
 
@@ -2000,6 +2656,744 @@ class _ConfirmKeyState extends State<_ConfirmKey> {
                       fontSize: 22, fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary))))));
   }
+}
+
+// ── Edit Product Draft ────────────────────────────────────────────────────────
+class _EditDraft {
+  final int productId;
+  final TextEditingController name      = TextEditingController();
+  final TextEditingController sku       = TextEditingController();
+  final TextEditingController buy       = TextEditingController();
+  final TextEditingController sell      = TextEditingController();
+  final TextEditingController wholesale = TextEditingController();
+  final TextEditingController minWsQty  = TextEditingController();
+  final TextEditingController reorder   = TextEditingController();
+  String unit       = 'pcs';
+  int?   categoryId;
+  bool   expanded   = true;
+
+  _EditDraft({required StockItem item}) : productId = item.id {
+    name.text      = item.name;
+    sku.text       = item.sku;
+    buy.text       = item.buyingPrice > 0
+        ? item.buyingPrice.toStringAsFixed(0) : '';
+    sell.text      = item.sellingPrice > 0
+        ? item.sellingPrice.toStringAsFixed(0) : '';
+    wholesale.text = item.wholesalePrice > 0 && item.wholesalePrice != item.sellingPrice
+        ? item.wholesalePrice.toStringAsFixed(0) : '';
+    minWsQty.text  = (item.minWholesaleQty ?? 0) > 0
+        ? (item.minWholesaleQty!).toStringAsFixed(0) : '';
+    reorder.text   = item.reorderLevel > 0
+        ? item.reorderLevel.toStringAsFixed(0) : '0';
+    unit           = item.unit.isNotEmpty ? item.unit : 'pcs';
+  }
+
+  void dispose() {
+    name.dispose(); sku.dispose();
+    buy.dispose(); sell.dispose();
+    wholesale.dispose(); minWsQty.dispose(); reorder.dispose();
+  }
+
+  String get summaryName => name.text.trim().isEmpty ? 'Unnamed' : name.text.trim();
+  String get summarySell => sell.text.trim().isEmpty ? '—' : 'TZS ${sell.text.trim()}';
+}
+
+// ── Edit Product Sheet ────────────────────────────────────────────────────────
+class _EditProductSheet extends StatefulWidget {
+  final StockItem initialItem;
+  final List<StockItem> allItems;
+  final String branchName;
+  final VoidCallback onSaved;
+
+  const _EditProductSheet({
+    required this.initialItem,
+    required this.allItems,
+    required this.branchName,
+    required this.onSaved,
+  });
+
+  @override
+  State<_EditProductSheet> createState() => _EditProductSheetState();
+}
+
+class _EditProductSheetState extends State<_EditProductSheet> {
+  late final List<_EditDraft> _drafts;
+  List<Map<String, dynamic>> _categories = [];
+  bool    _saving  = false;
+  bool    _loading = true;
+  String? _error;
+
+  static const _units = ['pcs', 'kg', 'g', 'ltr', 'ml', 'box', 'carton',
+                         'dozen', 'pair', 'roll', 'bag', 'packet'];
+
+  @override
+  void initState() {
+    super.initState();
+    _drafts = [_EditDraft(item: widget.initialItem)];
+    _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    for (final d in _drafts) d.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await ApiService.getCategories();
+    if (mounted) setState(() { _categories = cats; _loading = false; });
+  }
+
+  void _removeDraft(int i) {
+    if (_drafts.length == 1) return;
+    setState(() { _drafts[i].dispose(); _drafts.removeAt(i); });
+  }
+
+  void _addAnotherProduct() {
+    final already = _drafts.map((d) => d.productId).toSet();
+    final available = widget.allItems
+        .where((p) => !already.contains(p.id))
+        .toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('All products are already queued',
+          style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+          backgroundColor: AppColors.textMuted,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProductPickerSheet(
+        products: available,
+        onPicked: (item) {
+          setState(() {
+            for (final d in _drafts) d.expanded = false;
+            _drafts.add(_EditDraft(item: item));
+          });
+          HapticFeedback.selectionClick();
+        },
+      ),
+    );
+  }
+
+  bool _validateAll() {
+    for (int i = 0; i < _drafts.length; i++) {
+      final d = _drafts[i];
+      if (d.name.text.trim().isEmpty) {
+        setState(() { _error = 'Product ${i+1}: name is required'; d.expanded = true; });
+        return false;
+      }
+      if ((double.tryParse(d.sell.text.trim()) ?? 0) <= 0) {
+        setState(() { _error = 'Product ${i+1} (${d.summaryName}): enter selling price'; d.expanded = true; });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _confirmPin() async {
+    final hasPin = await PinService.hasPin();
+    if (!hasPin) return true;
+    if (!mounted) return false;
+    final r = await showModalBottomSheet<bool>(
+      context: context, isScrollControlled: true,
+      backgroundColor: Colors.transparent, isDismissible: true,
+      builder: (_) => const _PinConfirmSheet());
+    return r == true;
+  }
+
+  Future<void> _save() async {
+    setState(() => _error = null);
+    if (!_validateAll()) return;
+    HapticFeedback.mediumImpact();
+    final pinOk = await _confirmPin();
+    if (!pinOk || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      Map<String, dynamic> res;
+      if (_drafts.length == 1) {
+        final d = _drafts.first;
+        res = await ApiService.updateProduct(
+          productId:        d.productId,
+          name:             d.name.text.trim(),
+          sku:              d.sku.text.trim(),
+          unit:             d.unit,
+          categoryId:       d.categoryId,
+          buyingPrice:      double.tryParse(d.buy.text.trim())       ?? 0,
+          sellingPrice:     double.tryParse(d.sell.text.trim())      ?? 0,
+          wholesalePrice:   double.tryParse(d.wholesale.text.trim()) ?? 0,
+          minWholesaleQty:  double.tryParse(d.minWsQty.text.trim())  ?? 0,
+          reorderLevel:     double.tryParse(d.reorder.text.trim())   ?? 0,
+        );
+      } else {
+        final products = _drafts.map((d) => <String, dynamic>{
+          'product_id':        d.productId,
+          'name':              d.name.text.trim(),
+          'sku':               d.sku.text.trim(),
+          'unit':              d.unit,
+          'category_id':       d.categoryId?.toString() ?? '',
+          'buying_price':      double.tryParse(d.buy.text.trim())       ?? 0,
+          'selling_price':     double.tryParse(d.sell.text.trim())      ?? 0,
+          'wholesale_price':   double.tryParse(d.wholesale.text.trim()) ?? 0,
+          'min_wholesale_qty': double.tryParse(d.minWsQty.text.trim())  ?? 0,
+          'reorder_level':     double.tryParse(d.reorder.text.trim())   ?? 0,
+        }).toList();
+        res = await ApiService.bulkUpdateProducts(products);
+      }
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        HapticFeedback.heavyImpact();
+        Navigator.pop(context);
+        widget.onSaved();
+      } else {
+        setState(() { _saving = false; _error = res['error'] ?? 'Failed to save'; });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _saving = false; _error = 'Network error — check connection'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = _drafts.length;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.92),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // ── Header ─────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0C2518), AppColors.primary, Color(0xFF1A4A2E)]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.25),
+                blurRadius: 12, offset: const Offset(0, 4))],
+            ),
+            child: Column(children: [
+              Row(children: [
+                Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(11)),
+                  child: const Icon(Icons.edit_rounded, color: Colors.white, size: 20)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Text('Edit Products',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16, fontWeight: FontWeight.w900,
+                            color: Colors.white, letterSpacing: -0.3)),
+                        if (count > 1) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppColors.accent.withValues(alpha: 0.5))),
+                            child: Text('$count',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11, fontWeight: FontWeight.w900,
+                                color: Colors.white))),
+                        ],
+                      ]),
+                      Text('Update product details & prices',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.6))),
+                    ])),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.close_rounded,
+                      color: Colors.white, size: 18))),
+              ]),
+            ]),
+          ),
+
+          // ── Branch alert banner ──────────────────────────────────────────
+          if (widget.branchName.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.accent.withValues(alpha: 0.25)))),
+              child: Row(children: [
+                Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.store_rounded,
+                    size: 16, color: AppColors.accent)),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('YOU ARE EDITING FOR',
+                      style: GoogleFonts.inter(
+                        fontSize: 9, fontWeight: FontWeight.w800,
+                        color: AppColors.accent.withValues(alpha: 0.7),
+                        letterSpacing: 0.6)),
+                    Text(widget.branchName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, fontWeight: FontWeight.w900,
+                        color: const Color(0xFFB45309))),
+                  ])),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppColors.accent.withValues(alpha: 0.3))),
+                  child: Text('Active Branch',
+                    style: GoogleFonts.inter(
+                      fontSize: 9, fontWeight: FontWeight.w800,
+                      color: AppColors.accent))),
+              ])),
+
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator(color: AppColors.primary)),
+
+          if (!_loading)
+            Flexible(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                itemCount: count + 1,
+                itemBuilder: (_, idx) {
+                  if (idx == count) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: GestureDetector(
+                        onTap: _addAnotherProduct,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.18))),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 24, height: 24,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle),
+                                child: const Icon(Icons.add_rounded,
+                                  color: AppColors.primary, size: 16)),
+                              const SizedBox(width: 8),
+                              Text('Edit Another Product',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13, fontWeight: FontWeight.w800,
+                                  color: AppColors.primary)),
+                            ]),
+                        ),
+                      ),
+                    );
+                  }
+                  return _EditDraftCard(
+                    key: ValueKey(_drafts[idx].productId),
+                    draft: _drafts[idx], index: idx, total: count,
+                    categories: _categories, units: _units,
+                    onRemove: () => _removeDraft(idx),
+                    onToggle: () => setState(() =>
+                      _drafts[idx].expanded = !_drafts[idx].expanded),
+                  );
+                },
+              ),
+            ),
+
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.danger.withValues(alpha: 0.3))),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded,
+                  size: 16, color: AppColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!,
+                  style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: AppColors.danger))),
+              ])),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            child: GestureDetector(
+              onTap: _saving ? null : _save,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: double.infinity, height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _saving
+                        ? [AppColors.primary.withValues(alpha: 0.5),
+                           AppColors.primaryMid.withValues(alpha: 0.5)]
+                        : [AppColors.primary, AppColors.primaryMid]),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: _saving ? [] : [BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 14, offset: const Offset(0, 5))]),
+                child: Center(
+                  child: _saving
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white))
+                      : Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.save_rounded,
+                            color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text(count == 1
+                              ? 'Save Changes'
+                              : 'Save $count Products',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15, fontWeight: FontWeight.w900,
+                              color: Colors.white, letterSpacing: -0.3)),
+                        ])),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Edit Draft Card (collapsible) ─────────────────────────────────────────────
+class _EditDraftCard extends StatelessWidget {
+  final _EditDraft draft;
+  final int index, total;
+  final List<Map<String, dynamic>> categories;
+  final List<String> units;
+  final VoidCallback onRemove, onToggle;
+
+  const _EditDraftCard({
+    super.key, required this.draft, required this.index, required this.total,
+    required this.categories, required this.units,
+    required this.onRemove, required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 10),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.border),
+      boxShadow: [BoxShadow(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        blurRadius: 8, offset: const Offset(0, 2))]),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      GestureDetector(
+        onTap: onToggle,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: draft.expanded
+                ? AppColors.accent.withValues(alpha: 0.04) : Colors.transparent,
+            borderRadius: BorderRadius.vertical(
+              top: const Radius.circular(16),
+              bottom: draft.expanded ? Radius.zero : const Radius.circular(16))),
+          child: Row(children: [
+            Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.edit_rounded, size: 14, color: AppColors.accent)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: draft.expanded
+                  ? Text('Edit product details',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13, fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary))
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(draft.summaryName,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13, fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(draft.summarySell,
+                        style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500)),
+                    ])),
+            Icon(draft.expanded
+                ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+              size: 20, color: AppColors.textMuted),
+            if (total > 1) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.close_rounded,
+                    size: 15, color: AppColors.danger))),
+            ],
+          ]),
+        ),
+      ),
+      AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: draft.expanded
+            ? _EditDraftForm(draft: draft, categories: categories, units: units)
+            : const SizedBox.shrink()),
+    ]),
+  );
+}
+
+// ── Edit Draft Form ───────────────────────────────────────────────────────────
+class _EditDraftForm extends StatefulWidget {
+  final _EditDraft draft;
+  final List<Map<String, dynamic>> categories;
+  final List<String> units;
+  const _EditDraftForm({
+    required this.draft, required this.categories, required this.units});
+  @override State<_EditDraftForm> createState() => _EditDraftFormState();
+}
+
+class _EditDraftFormState extends State<_EditDraftForm> {
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.draft;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _FLabel('Product Name *'), const SizedBox(height: 5),
+        _FField(controller: d.name, hint: 'e.g. Cement 50kg',
+          icon: Icons.inventory_2_rounded,
+          textCapitalization: TextCapitalization.words),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(flex: 3, child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _FLabel('SKU'), const SizedBox(height: 5),
+              _FField(controller: d.sku, hint: 'Optional',
+                icon: Icons.qr_code_rounded),
+            ])),
+          const SizedBox(width: 10),
+          Expanded(flex: 2, child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _FLabel('Unit'), const SizedBox(height: 5),
+              _UnitPicker(value: d.unit, units: widget.units,
+                onChanged: (v) { if (v != null) setState(() => d.unit = v); }),
+            ])),
+        ]),
+        const SizedBox(height: 12),
+        _FLabel('Category'), const SizedBox(height: 5),
+        _CategoryPicker(categories: widget.categories, value: d.categoryId,
+          onChanged: (v) => setState(() => d.categoryId = v)),
+        const SizedBox(height: 12),
+        _FLabel('Prices (TZS)'), const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: _FField(controller: d.buy, hint: 'Buying',
+            icon: Icons.arrow_downward_rounded,
+            keyboardType: TextInputType.number, prefix: 'Buy  ')),
+          const SizedBox(width: 8),
+          Expanded(child: _FField(controller: d.sell, hint: 'Selling *',
+            icon: Icons.arrow_upward_rounded,
+            keyboardType: TextInputType.number, prefix: 'Sell ')),
+        ]),
+        const SizedBox(height: 10),
+        _FLabel('Wholesale Pricing (optional)'), const SizedBox(height: 5),
+        Row(children: [
+          Expanded(child: _FField(controller: d.wholesale, hint: 'Wholesale price',
+            icon: Icons.local_offer_outlined,
+            keyboardType: TextInputType.number, prefix: 'WS   ')),
+          const SizedBox(width: 8),
+          Expanded(child: _FField(controller: d.minWsQty, hint: 'Min qty',
+            icon: Icons.numbers_rounded,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true), prefix: 'Min  ')),
+        ]),
+        const SizedBox(height: 5),
+        Text('Wholesale activates when qty ≥ min (leave blank to skip)',
+          style: GoogleFonts.inter(
+            fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 12),
+        _FLabel('Reorder Alert Level'), const SizedBox(height: 5),
+        _FField(controller: d.reorder, hint: '0',
+          icon: Icons.notifications_active_rounded,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          prefix: 'Alert'),
+        const SizedBox(height: 5),
+        Text('Triggers Low Stock warning when qty drops to or below this value',
+          style: GoogleFonts.inter(
+            fontSize: 10, color: AppColors.textMuted,
+            fontWeight: FontWeight.w500)),
+      ]),
+    );
+  }
+}
+
+// ── Product Picker Sheet (for "edit another product") ─────────────────────────
+class _ProductPickerSheet extends StatefulWidget {
+  final List<StockItem> products;
+  final void Function(StockItem) onPicked;
+  const _ProductPickerSheet({required this.products, required this.onPicked});
+  @override State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
+}
+
+class _ProductPickerSheetState extends State<_ProductPickerSheet> {
+  final _ctrl = TextEditingController();
+  List<StockItem> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.products;
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  void _search(String q) {
+    setState(() {
+      _filtered = q.trim().isEmpty
+          ? widget.products
+          : widget.products.where((p) =>
+              p.name.toLowerCase().contains(q.toLowerCase()) ||
+              p.sku.toLowerCase().contains(q.toLowerCase())).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: MediaQuery.of(context).size.height * 0.65,
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    child: Column(children: [
+      Container(
+        margin: const EdgeInsets.only(top: 12),
+        width: 40, height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+        child: Row(children: [
+          Expanded(
+            child: Text('Pick a product to edit',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 15, fontWeight: FontWeight.w900,
+                color: AppColors.textPrimary))),
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: const Icon(Icons.close_rounded, size: 22,
+              color: AppColors.textMuted)),
+        ])),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: TextField(
+          controller: _ctrl,
+          autofocus: true,
+          onChanged: _search,
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Search products…',
+            prefixIcon: const Icon(Icons.search_rounded, size: 18,
+              color: AppColors.textMuted),
+            filled: true, fillColor: AppColors.bg,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: AppColors.border)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 11, horizontal: 12)))),
+      const SizedBox(height: 8),
+      Expanded(
+        child: _filtered.isEmpty
+            ? Center(child: Text('No products found',
+                style: GoogleFonts.inter(color: AppColors.textMuted)))
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                itemCount: _filtered.length,
+                itemBuilder: (_, i) {
+                  final p = _filtered[i];
+                  return GestureDetector(
+                    onTap: () { Navigator.pop(context); widget.onPicked(p); },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.border)),
+                      child: Row(children: [
+                        Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.inventory_2_rounded,
+                            size: 17, color: AppColors.primary)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p.name,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13, fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(Fmt.money(p.sellingPrice),
+                              style: GoogleFonts.inter(
+                                fontSize: 11, fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted)),
+                          ])),
+                        const Icon(Icons.chevron_right_rounded, size: 18,
+                          color: AppColors.textMuted),
+                      ])),
+                  );
+                }),
+      ),
+    ]),
+  );
 }
 
 class _TypeBtn extends StatelessWidget {

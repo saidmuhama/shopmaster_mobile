@@ -4,10 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 import 'dashboard_screen.dart';
 import 'sales_screen.dart';
 import 'stock_screen.dart';
+import 'stock_adjustments_screen.dart';
 import 'reports_screen.dart';
 import 'profile_screen.dart';
 import 'pos_screen.dart';
@@ -40,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen>
       _navCtrl.forward();
       NotificationService.startPolling();
       NotificationService.uploadToken();
+      UpdateService.checkUpdate(context); // fire-and-forget, never throws
     }
   }
 
@@ -68,27 +72,31 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
 
-    // Cashier: POS → Stock → Profile (3 tabs, branch-locked)
+    // Cashier: POS → Sales → Stock → Profile (4 tabs, branch-locked)
     // Owner/Manager/StockManager: Dashboard → Sales → POS → Stock → Reports → Profile (6 tabs)
     final List<Widget> screens;
     final List<_NavItem> navItems;
 
     if (_isCashier) {
       screens = [
-        PosScreen(user: user),
+        PosScreen(user: user, tabNotifier: _tabNotifier),
+        SalesScreen(tabNotifier: _tabNotifier),
         StockScreen(tabNotifier: _tabNotifier),
+        const StockAdjustmentsScreen(),
         ProfileScreen(user: user),
       ];
       navItems = const [
         _NavItem(Icons.point_of_sale_rounded,  Icons.point_of_sale_outlined,  'POS'),
+        _NavItem(Icons.receipt_rounded,        Icons.receipt_outlined,        'Sales'),
         _NavItem(Icons.inventory_2_rounded,    Icons.inventory_2_outlined,    'Products'),
+        _NavItem(Icons.history_rounded,        Icons.history_outlined,        'Adjustments'),
         _NavItem(Icons.person_rounded,         Icons.person_outlined,         'Profile'),
       ];
     } else {
       screens = [
         DashboardScreen(user: user, onTabSwitch: (i) => setState(() => _tab = i), tabNotifier: _tabNotifier),
         SalesScreen(tabNotifier: _tabNotifier),
-        PosScreen(user: user),
+        PosScreen(user: user, tabNotifier: _tabNotifier),
         StockScreen(tabNotifier: _tabNotifier),
         ReportsScreen(user: user),
         ProfileScreen(user: user),
@@ -105,6 +113,30 @@ class _HomeScreenState extends State<HomeScreen>
 
     // Guard tab index in case it's stale after role change
     final safeTab = _tab.clamp(0, screens.length - 1);
+    final resp = Responsive.of(context);
+
+    void onTabTap(int i) {
+      setState(() => _tab = i);
+      _tabNotifier.value = i;
+    }
+
+    if (resp.isTablet) {
+      return Scaffold(
+        body: FadeTransition(
+          opacity: _navCtrl,
+          child: Row(children: [
+            _TabletNavRail(
+              currentIndex: safeTab,
+              items: navItems,
+              onTap: onTabTap,
+              user: user,
+              extended: resp.isLargeTablet,
+            ),
+            Expanded(child: IndexedStack(index: safeTab, children: screens)),
+          ]),
+        ),
+      );
+    }
 
     return Scaffold(
       body: IndexedStack(index: safeTab, children: screens),
@@ -113,11 +145,206 @@ class _HomeScreenState extends State<HomeScreen>
         child: _PremiumBottomNav(
           currentIndex: safeTab,
           items: navItems,
-          onTap: (i) {
-            setState(() => _tab = i);
-            _tabNotifier.value = i; // triggers reload in Dashboard/Sales/Stock
-          },
+          onTap: onTabTap,
         ),
+      ),
+    );
+  }
+}
+
+// ── Tablet side navigation rail ──────────────────────────────────────────────
+class _TabletNavRail extends StatelessWidget {
+  final int currentIndex;
+  final List<_NavItem> items;
+  final ValueChanged<int> onTap;
+  final AuthUser user;
+  final bool extended;
+
+  const _TabletNavRail({
+    required this.currentIndex, required this.items,
+    required this.onTap, required this.user, this.extended = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final railWidth = extended ? 200.0 : 76.0;
+    return Container(
+      width: railWidth,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF061410), Color(0xFF0F2D1A)],
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        ),
+        boxShadow: [BoxShadow(
+          color: Color(0x22000000), blurRadius: 16, offset: Offset(4, 0))],
+      ),
+      child: SafeArea(
+        child: Column(children: [
+          // Brand logo / app name
+          Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: 20, horizontal: extended ? 16 : 10),
+            child: extended
+                ? Row(children: [
+                    Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: AppColors.accent.withValues(alpha: 0.3))),
+                      child: const Icon(Icons.store_rounded,
+                        color: AppColors.accent, size: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('MDSPro',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13, fontWeight: FontWeight.w900,
+                            color: Colors.white, letterSpacing: -0.3)),
+                        Text(user.shopName,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.white.withValues(alpha: 0.45),
+                            fontWeight: FontWeight.w500)),
+                      ],
+                    )),
+                  ])
+                : Center(child: Container(
+                    width: 38, height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                        color: AppColors.accent.withValues(alpha: 0.3))),
+                    child: const Icon(Icons.store_rounded,
+                      color: AppColors.accent, size: 20))),
+          ),
+          Container(height: 1,
+            color: Colors.white.withValues(alpha: 0.08),
+            margin: const EdgeInsets.symmetric(horizontal: 12)),
+          const SizedBox(height: 8),
+          // Nav items
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final sel = i == currentIndex;
+                final isPOS = items[i].label == 'POS';
+                final activeColor = isPOS ? AppColors.accent : AppColors.accent;
+                return Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: extended ? 10 : 8, vertical: 3),
+                  child: GestureDetector(
+                    onTap: () => onTap(i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: extended ? 12 : 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? activeColor.withValues(alpha: 0.15)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: sel
+                            ? Border.all(
+                                color: activeColor.withValues(alpha: 0.3),
+                                width: 1)
+                            : null,
+                      ),
+                      child: extended
+                          ? Row(children: [
+                              Icon(
+                                sel ? items[i].activeIcon : items[i].icon,
+                                size: 20,
+                                color: sel
+                                    ? activeColor
+                                    : Colors.white.withValues(alpha: 0.5)),
+                              const SizedBox(width: 12),
+                              Text(items[i].label,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: sel
+                                      ? FontWeight.w700 : FontWeight.w500,
+                                  color: sel
+                                      ? activeColor
+                                      : Colors.white.withValues(alpha: 0.5))),
+                            ])
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  sel ? items[i].activeIcon : items[i].icon,
+                                  size: 20,
+                                  color: sel
+                                      ? activeColor
+                                      : Colors.white.withValues(alpha: 0.5)),
+                                const SizedBox(height: 4),
+                                Text(items[i].label,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: sel
+                                        ? FontWeight.w700 : FontWeight.w500,
+                                    color: sel
+                                        ? activeColor
+                                        : Colors.white.withValues(alpha: 0.45))),
+                              ],
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // User info at bottom
+          Container(height: 1,
+            color: Colors.white.withValues(alpha: 0.08),
+            margin: const EdgeInsets.symmetric(horizontal: 12)),
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: extended ? 14 : 8, vertical: 14),
+            child: extended
+                ? Row(children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                      child: Text(user.name.isNotEmpty
+                          ? user.name[0].toUpperCase() : 'U',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13, fontWeight: FontWeight.w800,
+                          color: AppColors.accent))),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user.name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.85))),
+                        Text(user.role,
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            color: Colors.white.withValues(alpha: 0.4),
+                            fontWeight: FontWeight.w500)),
+                      ],
+                    )),
+                  ])
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppColors.accent.withValues(alpha: 0.2),
+                      child: Text(user.name.isNotEmpty
+                          ? user.name[0].toUpperCase() : 'U',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12, fontWeight: FontWeight.w800,
+                          color: AppColors.accent))),
+                  ]),
+          ),
+        ]),
       ),
     );
   }

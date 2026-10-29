@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatter.dart';
 import '../utils/animations.dart';
+import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
 
 class SalesScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _SalesScreenState extends State<SalesScreen>
   List<Sale> _sales = [];
   bool _loading = true;
   bool _showSearch = false;
+  String? _error;
 
   final _filters = const [
     ('today',  'Today'),
@@ -57,10 +59,15 @@ class _SalesScreenState extends State<SalesScreen>
   }
 
   Future<void> _load({String? search}) async {
-    setState(() => _loading = true);
-    final sales = await ApiService.getSales(filter: _filter, search: search);
-    if (!mounted) return;
-    setState(() { _sales = sales; _loading = false; });
+    setState(() { _loading = true; _error = null; });
+    try {
+      final sales = await ApiService.getSales(filter: _filter, search: search);
+      if (!mounted) return;
+      setState(() { _sales = sales; _loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = 'Failed to load sales. Pull to refresh.'; });
+    }
   }
 
   double get _totalAmount =>
@@ -77,17 +84,34 @@ class _SalesScreenState extends State<SalesScreen>
         Expanded(
           child: _loading
               ? _buildShimmer()
-              : _sales.isEmpty
-                  ? _buildEmpty()
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      color: AppColors.primary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                        itemCount: _sales.length,
-                        itemBuilder: (_, i) => _SaleCard(sale: _sales[i]),
-                      ),
-                    ),
+              : _error != null
+                  ? _buildError()
+                  : _sales.isEmpty
+                      ? _buildEmpty()
+                      : Builder(builder: (ctx) {
+                        final resp = Responsive.of(ctx);
+                        return RefreshIndicator(
+                          onRefresh: _load,
+                          color: AppColors.primary,
+                          child: resp.isLargeTablet
+                              ? GridView.builder(
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: 3.2,
+                                  ),
+                                  itemCount: _sales.length,
+                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i]),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                                  itemCount: _sales.length,
+                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i]),
+                                ),
+                        );
+                      }),
         ),
       ]),
     );
@@ -269,6 +293,40 @@ class _SalesScreenState extends State<SalesScreen>
     itemBuilder: (_, __) => Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: ShimmerBox(width: double.infinity, height: 84, radius: 16),
+    ),
+  );
+
+  Widget _buildError() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 72, height: 72,
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(20)),
+          child: const Icon(Icons.wifi_off_rounded,
+            size: 36, color: Colors.red)),
+        const SizedBox(height: 14),
+        Text('Connection Error',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 16, fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary)),
+        const SizedBox(height: 6),
+        Text(_error!, textAlign: TextAlign.center,
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textMuted)),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('Retry'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12))),
+        ),
+      ]),
     ),
   );
 
@@ -610,6 +668,13 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
                   onTap: _callCustomer,
                 ),
               ],
+              const SizedBox(width: 8),
+              _HeaderChip(
+                icon: Icons.edit_rounded,
+                label: 'Amend',
+                onTap: _openAmendSheet,
+                accent: true,
+              ),
             ]),
           ]),
         ),
@@ -718,6 +783,40 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
     if (phone.isEmpty) return;
     HapticFeedback.selectionClick();
     launchUrl(Uri.parse('tel:$phone'));
+  }
+
+  void _openAmendSheet() {
+    if (_detail == null) return;
+    HapticFeedback.selectionClick();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AmendSheet(
+        saleId: widget.sale.id,
+        invoiceNo: widget.sale.invoiceNo,
+        currentPaymentMethod: _detail!.paymentMethod,
+        currentNotes: _detail!.notes,
+        onSuccess: () {
+          _load();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Row(children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Text('Invoice amended successfully',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700, color: Colors.white)),
+            ]),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ));
+        },
+      ),
+    );
   }
 
   void _openCollectSheet() {
@@ -880,7 +979,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
                         Expanded(
                           flex: 1,
                           child: Text(
-                            '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity}${item.unit.isNotEmpty ? ' ${item.unit}' : ''}',
+                            '${Fmt.qty(item.quantity)}${item.unit.isNotEmpty ? ' ${item.unit}' : ''}',
                             style: GoogleFonts.inter(
                               fontSize: 12, fontWeight: FontWeight.w600,
                               color: AppColors.textSecondary),
@@ -1076,12 +1175,315 @@ String _fmtMoney(double v) {
   return 'TZS $n';
 }
 
+// ── Amend Invoice Sheet ───────────────────────────────────────────────────────
+class _AmendSheet extends StatefulWidget {
+  final int saleId;
+  final String invoiceNo;
+  final String currentPaymentMethod;
+  final String currentNotes;
+  final VoidCallback onSuccess;
+  const _AmendSheet({
+    required this.saleId,
+    required this.invoiceNo,
+    required this.currentPaymentMethod,
+    required this.currentNotes,
+    required this.onSuccess,
+  });
+
+  @override
+  State<_AmendSheet> createState() => _AmendSheetState();
+}
+
+class _AmendSheetState extends State<_AmendSheet> {
+  static const _methods = [
+    ('cash',     'Cash',      Icons.payments_rounded,          Color(0xFF0F2D1A)),
+    ('mpesa',    'M-Pesa',    Icons.phone_android_rounded,     Color(0xFF16A34A)),
+    ('tigopesa', 'Tigo Pesa', Icons.phone_android_rounded,     Color(0xFF0369A1)),
+    ('airtel',   'Airtel',    Icons.phone_android_rounded,     Color(0xFFDC2626)),
+    ('bank',     'Bank',      Icons.account_balance_rounded,   Color(0xFF7C3AED)),
+    ('credit',   'Credit',    Icons.credit_card_rounded,       Color(0xFFD97706)),
+  ];
+
+  late String _method;
+  late final TextEditingController _notesCtrl;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _method   = widget.currentPaymentMethod;
+    _notesCtrl = TextEditingController(text: widget.currentNotes);
+  }
+
+  @override
+  void dispose() { _notesCtrl.dispose(); super.dispose(); }
+
+  bool get _hasChanges =>
+      _method != widget.currentPaymentMethod ||
+      _notesCtrl.text.trim() != widget.currentNotes.trim();
+
+  Future<void> _submit() async {
+    if (!_hasChanges) { Navigator.pop(context); return; }
+    setState(() { _submitting = true; _error = null; });
+    final res = await ApiService.amendSale(
+      saleId:        widget.saleId,
+      paymentMethod: _method != widget.currentPaymentMethod ? _method : null,
+      notes:         _notesCtrl.text.trim() != widget.currentNotes.trim()
+                         ? _notesCtrl.text.trim() : null,
+    );
+    if (!mounted) return;
+    if (res['ok'] == true) {
+      HapticFeedback.heavyImpact();
+      Navigator.pop(context);
+      widget.onSuccess();
+    } else {
+      setState(() {
+        _submitting = false;
+        _error = res['error']?.toString() ?? 'Amendment failed';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: mq.size.height * 0.88),
+        decoration: const BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // ── Premium header ──────────────────────────────────────────────
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF061410), Color(0xFF0F2D1A), Color(0xFF1a472a)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(children: [
+              Center(child: Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(children: [
+                Container(
+                  width: 46, height: 46,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: AppColors.accent.withValues(alpha: 0.3))),
+                  child: const Icon(Icons.edit_rounded,
+                    color: AppColors.accent, size: 20)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Amend Invoice',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18, fontWeight: FontWeight.w900,
+                        color: Colors.white, letterSpacing: -0.4)),
+                    Text(widget.invoiceNo,
+                      style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.5))),
+                  ]),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.close_rounded,
+                      color: Colors.white54, size: 18))),
+              ]),
+            ]),
+          ),
+
+          // ── Body ────────────────────────────────────────────────────────
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+                // Info banner
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.3))),
+                  child: Row(children: [
+                    const Icon(Icons.info_outline_rounded,
+                      size: 15, color: AppColors.warning),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'You can change the payment method and notes. '
+                        'Item changes must be done from the web portal.',
+                        style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary))),
+                  ]),
+                ),
+                const SizedBox(height: 20),
+
+                // Payment method
+                Text('PAYMENT METHOD',
+                  style: GoogleFonts.inter(
+                    fontSize: 10, fontWeight: FontWeight.w800,
+                    color: AppColors.textMuted, letterSpacing: 1.0)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _methods.map((m) {
+                    final (id, label, icon, color) = m;
+                    final sel = _method == id;
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() => _method = id);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: sel ? color : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: sel ? color : AppColors.border,
+                            width: sel ? 2 : 1),
+                          boxShadow: sel ? [] : AppShadows.sm),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(icon, size: 14,
+                            color: sel ? Colors.white : AppColors.textMuted),
+                          const SizedBox(width: 6),
+                          Text(label,
+                            style: GoogleFonts.inter(
+                              fontSize: 12, fontWeight: FontWeight.w700,
+                              color: sel ? Colors.white : AppColors.textSecondary)),
+                        ]),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+
+                // Notes
+                Text('NOTES',
+                  style: GoogleFonts.inter(
+                    fontSize: 10, fontWeight: FontWeight.w800,
+                    color: AppColors.textMuted, letterSpacing: 1.0)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                    boxShadow: AppShadows.sm),
+                  child: TextField(
+                    controller: _notesCtrl,
+                    maxLines: 3,
+                    style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Add notes about this invoice…',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppColors.textMuted.withValues(alpha: 0.5)),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(14)),
+                  ),
+                ),
+
+                // Error
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.danger.withValues(alpha: 0.3))),
+                    child: Row(children: [
+                      const Icon(Icons.error_outline_rounded,
+                        size: 15, color: AppColors.danger),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_error!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w600,
+                            color: AppColors.danger))),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+
+          // ── Save button ─────────────────────────────────────────────────
+          Container(
+            padding: EdgeInsets.fromLTRB(20, 12, 20, mq.padding.bottom + 20),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              border: Border(top: BorderSide(color: AppColors.border))),
+            child: SizedBox(
+              width: double.infinity, height: 54,
+              child: ElevatedButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: Text(
+                  _hasChanges ? 'Save Changes' : 'No Changes',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15, fontWeight: FontWeight.w900)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasChanges
+                      ? AppColors.accent : AppColors.border,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      AppColors.accent.withValues(alpha: 0.4),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16))),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 // ── Header action chip ────────────────────────────────────────────────────────
 class _HeaderChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _HeaderChip({required this.icon, required this.label, required this.onTap});
+  final bool accent;
+  const _HeaderChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.accent = false,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -1089,16 +1491,22 @@ class _HeaderChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: accent
+            ? AppColors.accent.withValues(alpha: 0.25)
+            : Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2))),
+        border: Border.all(
+          color: accent
+              ? AppColors.accent.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.2))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.85)),
+        Icon(icon, size: 13,
+          color: accent ? AppColors.accent : Colors.white.withValues(alpha: 0.85)),
         const SizedBox(width: 5),
         Text(label,
           style: GoogleFonts.inter(
             fontSize: 11, fontWeight: FontWeight.w700,
-            color: Colors.white.withValues(alpha: 0.85))),
+            color: accent ? AppColors.accent : Colors.white.withValues(alpha: 0.85))),
       ]),
     ),
   );

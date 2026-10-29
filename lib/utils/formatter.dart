@@ -9,6 +9,12 @@ class Fmt {
   static String num(double n, {int decimals = 0}) =>
       NumberFormat('#,##0.${'0' * decimals}', 'en_US').format(n);
 
+  // Shows decimals only when they exist: 36.0 → "36", 36.5 → "36.5"
+  static String qty(double n) {
+    if (n % 1 == 0) return NumberFormat('#,##0', 'en_US').format(n.toInt());
+    return NumberFormat('#,##0.###', 'en_US').format(n);
+  }
+
   static String date(DateTime dt) => DateFormat('dd MMM yyyy').format(dt);
   static String time(DateTime dt) => DateFormat('HH:mm').format(dt);
   static String dateTime(DateTime dt) => DateFormat('dd MMM · HH:mm').format(dt);

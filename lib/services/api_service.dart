@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,6 +34,10 @@ class ApiService {
 
   // Decode response — on 401 clears session and navigates to login
   static Map<String, dynamic> _decode(http.Response res) {
+    // Guard against unexpectedly large responses (> 4 MB)
+    if (res.contentLength != null && res.contentLength! > 4 * 1024 * 1024) {
+      return {'ok': false, 'error': 'Response too large. Please contact support.'};
+    }
     Map<String, dynamic> data;
     try {
       data = json.decode(res.body) as Map<String, dynamic>;
@@ -67,6 +72,7 @@ class ApiService {
   static Map<String, String> get _getHeaders => {
     'Accept': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
+    'Cache-Control': 'no-store, no-cache',
     if (_token != null) 'X-Session-ID': _token!,
   };
 
@@ -89,6 +95,24 @@ class ApiService {
       await prefs.setString('cached_user', json.encode(data['user']));
     }
     return data;
+  }
+
+  static Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/auth.php'),
+      headers: _headers,
+      body: {
+        'action':           'change_password',
+        'current_password': currentPassword,
+        'new_password':     newPassword,
+        'confirm_password': confirmPassword,
+      },
+    ).timeout(_timeout);
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   static Future<void> logout() async {
@@ -137,6 +161,30 @@ class ApiService {
     return [];
   }
 
+  static Future<List<BranchStats>> getAllBranchStats() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/ajax/mobile/dashboard.php?mode=branches'),
+      headers: _getHeaders,
+    ).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) {
+      return (data['branches'] as List)
+          .map((b) => BranchStats.fromJson(b as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  static Future<CashierStats> getCashierStats() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/ajax/mobile/dashboard.php?mode=cashier'),
+      headers: _getHeaders,
+    ).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) return CashierStats.fromJson(data);
+    return CashierStats.empty();
+  }
+
   // ── Sales ─────────────────────────────────────────────────────────────────
   static Future<List<Sale>> getSales({
     String filter = 'today',
@@ -182,7 +230,7 @@ class ApiService {
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/ajax/mobile/adjust_stock.php'),
-      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      headers: {..._headers, 'Content-Type': 'application/json'},
       body: json.encode({
         'product_id': productId,
         'type': type,
@@ -190,6 +238,102 @@ class ApiService {
         'reason': reason,
         'notes': notes,
       }),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  // ── Pending stock adjustment approvals ───────────────────────────────────────
+  static Future<List<PendingAdjustment>> getPendingAdjustments() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/ajax/mobile/pending_adjustments.php'),
+        headers: _getHeaders,
+      ).timeout(_timeout);
+      final data = _decode(res);
+      if (data['ok'] == true) {
+        return (data['pending'] as List? ?? [])
+            .map((j) => PendingAdjustment.fromJson(j as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // Returns {ok, new_qty, old_qty} on success; {ok:false, error} on failure.
+  static Future<Map<String, dynamic>> approvePendingAdjustment(int id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/pending_adjustments.php'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'approve', 'id': id}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  // Returns {ok:true} on success; {ok:false, error} on failure.
+  static Future<Map<String, dynamic>> rejectPendingAdjustment(
+      int id, String reason) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/pending_adjustments.php'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'reject', 'id': id, 'reason': reason}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<List<Map<String, dynamic>>> getStockMovements({
+    int? productId,
+    int limit = 50,
+  }) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (productId != null) params['product_id'] = productId.toString();
+    final uri = Uri.parse('$baseUrl/ajax/mobile/stock_movements.php')
+        .replace(queryParameters: params);
+    final res = await http.get(uri, headers: _getHeaders).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) {
+      return List<Map<String, dynamic>>.from(data['movements'] ?? []);
+    }
+    return [];
+  }
+
+  static Future<List<Map<String, dynamic>>> getStockAdjustments({
+    String date = 'month',
+    String search = '',
+    int? branchId,
+    int limit = 200,
+  }) async {
+    final params = <String, String>{
+      'action': 'adjustments',
+      'date': date,
+      'limit': limit.toString(),
+    };
+    if (search.isNotEmpty) params['q'] = search;
+    if (branchId != null) params['branch_id'] = branchId.toString();
+    final uri = Uri.parse('$baseUrl/ajax/mobile/stock_movements.php')
+        .replace(queryParameters: params);
+    final res = await http.get(uri, headers: _getHeaders).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) {
+      return List<Map<String, dynamic>>.from(data['movements'] ?? []);
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> amendSale({
+    required int saleId,
+    String? paymentMethod,
+    String? notes,
+  }) async {
+    final body = <String, String>{
+      'action': 'amend',
+      'sale_id': saleId.toString(),
+    };
+    if (paymentMethod != null) body['payment_method'] = paymentMethod;
+    if (notes != null) body['notes'] = notes;
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/sales.php'),
+      headers: _headers,
+      body: body,
     ).timeout(_timeout);
     return _decode(res);
   }
@@ -223,13 +367,16 @@ class ApiService {
   }
 
   // ── POS ───────────────────────────────────────────────────────────────────
-  static Future<List<PosProduct>> searchProducts(String query) async {
-    final params = <String, String>{};
+  static Future<Map<String, dynamic>> searchProductsRaw(String query) async {
+    final params = <String, String>{'action': 'products'};
     if (query.isNotEmpty) params['q'] = query;
-    params['action'] = 'products';
     final uri = Uri.parse('$baseUrl/ajax/mobile/pos.php').replace(queryParameters: params);
     final res = await http.get(uri, headers: _getHeaders).timeout(_timeout);
-    final data = _decode(res);
+    return _decode(res);
+  }
+
+  static Future<List<PosProduct>> searchProducts(String query) async {
+    final data = await searchProductsRaw(query);
     if (data['ok'] == true) {
       return (data['products'] as List).map((p) => PosProduct.fromJson(p)).toList();
     }
@@ -244,6 +391,7 @@ class ApiService {
     String customerName = '',
     String customerPhone = '',
     String notes = '',
+    List<Map<String, dynamic>>? payments,
   }) async {
     final body = json.encode({
       'items': items.map((c) => {
@@ -260,6 +408,7 @@ class ApiService {
       'customer_name': customerName,
       'customer_phone': customerPhone,
       'notes': notes,
+      if (payments != null && payments.isNotEmpty) 'payments': payments,
     });
     final res = await http.post(
       Uri.parse('$baseUrl/ajax/mobile/pos.php'),
@@ -340,6 +489,8 @@ class ApiService {
     int? categoryId,
     required double buyingPrice,
     required double sellingPrice,
+    double wholesalePrice = 0,
+    double minWholesaleQty = 0,
     double qty = 0,
     double reorderLevel = 0,
   }) async {
@@ -347,17 +498,35 @@ class ApiService {
       Uri.parse('$baseUrl/ajax/mobile/add_product.php'),
       headers: _getHeaders,
       body: {
-        'action':        'add_product',
-        'name':          name,
-        'sku':           sku,
-        'unit':          unit,
-        'category_id':   categoryId?.toString() ?? '',
-        'buying_price':  buyingPrice.toString(),
-        'selling_price': sellingPrice.toString(),
-        'qty':           qty.toString(),
-        'reorder_level': reorderLevel.toString(),
+        'action':            'add_product',
+        'name':              name,
+        'sku':               sku,
+        'unit':              unit,
+        'category_id':       categoryId?.toString() ?? '',
+        'buying_price':      buyingPrice.toString(),
+        'selling_price':     sellingPrice.toString(),
+        'wholesale_price':   wholesalePrice.toString(),
+        'min_wholesale_qty': minWholesaleQty.toString(),
+        'qty':               qty.toString(),
+        'reorder_level':     reorderLevel.toString(),
       },
     ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> uploadProductImage({
+    required int productId,
+    required File imageFile,
+  }) async {
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/ajax/mobile/upload_image.php'),
+    );
+    req.headers.addAll(_getHeaders);
+    req.fields['product_id'] = productId.toString();
+    req.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+    final streamed = await req.send().timeout(_timeout);
+    final res = await http.Response.fromStream(streamed);
     return _decode(res);
   }
 
@@ -367,6 +536,49 @@ class ApiService {
       Uri.parse('$baseUrl/ajax/mobile/add_product.php'),
       headers: {..._getHeaders, 'Content-Type': 'application/json'},
       body: json.encode({'action': 'bulk_add', 'products': products}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  // ── Update product details ───────────────────────────────────────────────
+  static Future<Map<String, dynamic>> updateProduct({
+    required int productId,
+    required String name,
+    String sku = '',
+    String unit = 'pcs',
+    int? categoryId,
+    required double buyingPrice,
+    required double sellingPrice,
+    double wholesalePrice = 0,
+    double minWholesaleQty = 0,
+    double reorderLevel = 0,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/stock.php'),
+      headers: _getHeaders,
+      body: {
+        'action':            'update_product',
+        'product_id':        productId.toString(),
+        'name':              name,
+        'sku':               sku,
+        'unit':              unit,
+        'category_id':       categoryId?.toString() ?? '',
+        'buying_price':      buyingPrice.toString(),
+        'selling_price':     sellingPrice.toString(),
+        'wholesale_price':   wholesalePrice.toString(),
+        'min_wholesale_qty': minWholesaleQty.toString(),
+        'reorder_level':     reorderLevel.toString(),
+      },
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> bulkUpdateProducts(
+      List<Map<String, dynamic>> products) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/stock.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'bulk_update', 'products': products}),
     ).timeout(_timeout);
     return _decode(res);
   }
@@ -385,10 +597,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getUserPermissions(int userId) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/ajax/mobile/users.php?action=permissions&user_id=$userId'),
-      headers: _getHeaders,
-    ).timeout(_timeout);
+    final uri = Uri.parse('$baseUrl/ajax/mobile/users.php')
+        .replace(queryParameters: {'action': 'permissions', 'user_id': userId.toString()});
+    final res = await http.get(uri, headers: _getHeaders).timeout(_timeout);
     return _decode(res);
   }
 
@@ -446,6 +657,116 @@ class ApiService {
     return _decode(res);
   }
 
+  static Future<Map<String, dynamic>> editUser({
+    required int userId,
+    required String name,
+    required String phone,
+    required String role,
+    int? branchId,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/users.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({
+        'action': 'edit_user', 'user_id': userId,
+        'name': name, 'phone': phone, 'role': role,
+        'branch_id': branchId ?? '',
+      }),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> deleteUser(int userId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/users.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'delete_user', 'user_id': userId}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> resetUserPassword({
+    required int userId,
+    required String password,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/users.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'reset_password', 'user_id': userId, 'password': password}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  // ── Branch CRUD ──────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getBranchesManagement() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/ajax/mobile/branches.php'),
+      headers: _getHeaders,
+    ).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) {
+      return (data['branches'] as List).cast<Map<String, dynamic>>();
+    }
+    return [];
+  }
+
+  static Future<Map<String, dynamic>> addBranch({
+    required String name,
+    String code = '',
+    String address = '',
+    String city = '',
+    String phone = '',
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/branches.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({
+        'action': 'add_branch',
+        'name': name, 'code': code, 'address': address,
+        'city': city, 'phone': phone,
+      }),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> updateBranch({
+    required int branchId,
+    required String name,
+    String code = '',
+    String address = '',
+    String city = '',
+    String phone = '',
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/branches.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({
+        'action': 'update_branch', 'branch_id': branchId,
+        'name': name, 'code': code, 'address': address,
+        'city': city, 'phone': phone,
+      }),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> toggleBranch(int branchId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/branches.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'toggle_branch', 'branch_id': branchId}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> deleteBranch(int branchId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/branches.php'),
+      headers: {..._getHeaders, 'Content-Type': 'application/json'},
+      body: json.encode({'action': 'delete_branch', 'branch_id': branchId}),
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
   // ── Registration ─────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> registerOwner({
     required String shopName,
@@ -494,10 +815,9 @@ class ApiService {
 
   // ── Expenses ─────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getExpenses({String filter = 'month'}) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/ajax/mobile/expenses.php?action=list&filter=$filter'),
-      headers: _getHeaders,
-    ).timeout(_timeout);
+    final uri = Uri.parse('$baseUrl/ajax/mobile/expenses.php')
+        .replace(queryParameters: {'action': 'list', 'filter': filter});
+    final res = await http.get(uri, headers: _getHeaders).timeout(_timeout);
     return _decode(res);
   }
 

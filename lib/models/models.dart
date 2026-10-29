@@ -33,6 +33,8 @@ class DashboardStats {
   final double todayRevenue;
   final double monthRevenue;
   final double monthExpenses;
+  final double monthGrossProfit;
+  final double monthNetProfit;
   final int    todayTransactions;
   final int    lowStockCount;
   final int    pendingOrders;
@@ -43,6 +45,8 @@ class DashboardStats {
     required this.todayRevenue,
     required this.monthRevenue,
     required this.monthExpenses,
+    required this.monthGrossProfit,
+    required this.monthNetProfit,
     required this.todayTransactions,
     required this.lowStockCount,
     required this.pendingOrders,
@@ -50,13 +54,15 @@ class DashboardStats {
   });
 
   factory DashboardStats.fromJson(Map<String, dynamic> j) => DashboardStats(
-    todaySales: _d(j['today_sales']),
-    todayRevenue: _d(j['today_revenue']),
-    monthRevenue: _d(j['month_revenue']),
-    monthExpenses: _d(j['month_expenses']),
+    todaySales:        _d(j['today_sales']),
+    todayRevenue:      _d(j['today_revenue']),
+    monthRevenue:      _d(j['month_revenue']),
+    monthExpenses:     _d(j['month_expenses']),
+    monthGrossProfit:  _d(j['month_gross_profit']),
+    monthNetProfit:    _d(j['month_net_profit']),
     todayTransactions: _i(j['today_transactions']),
-    lowStockCount: _i(j['low_stock_count']),
-    pendingOrders: _i(j['pending_orders']),
+    lowStockCount:     _i(j['low_stock_count']),
+    pendingOrders:     _i(j['pending_orders']),
     outstandingCredits: _d(j['outstanding_credits']),
   );
 
@@ -65,6 +71,7 @@ class DashboardStats {
 
   factory DashboardStats.empty() => const DashboardStats(
     todaySales: 0, todayRevenue: 0, monthRevenue: 0, monthExpenses: 0,
+    monthGrossProfit: 0, monthNetProfit: 0,
     todayTransactions: 0, lowStockCount: 0, pendingOrders: 0, outstandingCredits: 0,
   );
 }
@@ -110,12 +117,15 @@ class StockItem {
   final double reorderLevel;
   final double buyingPrice;
   final double sellingPrice;
+  final double wholesalePrice;
+  final double? minWholesaleQty;
   final String categoryName;
 
   const StockItem({
     required this.id, required this.name, required this.sku,
     required this.unit, required this.qty, required this.reorderLevel,
     required this.buyingPrice, required this.sellingPrice,
+    this.wholesalePrice = 0, this.minWholesaleQty,
     required this.categoryName,
   });
 
@@ -131,6 +141,9 @@ class StockItem {
     reorderLevel: double.tryParse(j['reorder_level']?.toString() ?? '0') ?? 0,
     buyingPrice: double.tryParse(j['buying_price']?.toString() ?? '0') ?? 0,
     sellingPrice: double.tryParse(j['selling_price']?.toString() ?? '0') ?? 0,
+    wholesalePrice: double.tryParse(j['wholesale_price']?.toString() ?? '0') ?? 0,
+    minWholesaleQty: j['min_wholesale_qty'] != null
+        ? double.tryParse(j['min_wholesale_qty'].toString()) : null,
     categoryName: j['category_name'] ?? 'General',
   );
 }
@@ -237,12 +250,17 @@ class PosProduct {
   final double buyingPrice;
   final double qty;
   final String categoryName;
+  final String imageUrl;
+
+  final double? minWholesaleQty;
 
   const PosProduct({
     required this.id, required this.name, required this.sku,
     required this.unit, required this.sellingPrice,
     required this.wholesalePrice, required this.buyingPrice,
     required this.qty, required this.categoryName,
+    this.imageUrl = '',
+    this.minWholesaleQty,
   });
 
   bool get inStock => qty > 0;
@@ -257,6 +275,10 @@ class PosProduct {
     buyingPrice: double.tryParse(j['buying_price']?.toString() ?? '0') ?? 0,
     qty: double.tryParse(j['qty']?.toString() ?? '0') ?? 0,
     categoryName: j['category_name'] ?? 'General',
+    imageUrl: j['image_url']?.toString() ?? '',
+    minWholesaleQty: j['min_wholesale_qty'] != null
+        ? double.tryParse(j['min_wholesale_qty'].toString())
+        : null,
   );
 }
 
@@ -281,4 +303,106 @@ class SalesChartPoint {
   final String label;
   final double value;
   const SalesChartPoint({required this.label, required this.value});
+}
+
+// ─── Pending Stock Adjustment ─────────────────────────────────────────────────
+class PendingAdjustment {
+  final int    id;
+  final int    productId;
+  final int    branchId;
+  final String type;          // 'addition' | 'deduction'
+  final double qty;
+  final String note;
+  final String createdAt;
+  final String productName;
+  final String unit;
+  final double currentQty;
+  final String requestedBy;
+  final String requesterRole;
+  final String branchName;
+
+  const PendingAdjustment({
+    required this.id,
+    required this.productId,
+    required this.branchId,
+    required this.type,
+    required this.qty,
+    required this.note,
+    required this.createdAt,
+    required this.productName,
+    required this.unit,
+    required this.currentQty,
+    required this.requestedBy,
+    required this.requesterRole,
+    required this.branchName,
+  });
+
+  bool get isAddition => type == 'addition';
+
+  factory PendingAdjustment.fromJson(Map<String, dynamic> j) => PendingAdjustment(
+    id:            j['id'] ?? 0,
+    productId:     j['product_id'] ?? 0,
+    branchId:      j['branch_id'] ?? 0,
+    type:          j['type'] ?? 'addition',
+    qty:           double.tryParse(j['qty']?.toString() ?? '0') ?? 0,
+    note:          j['note'] ?? '',
+    createdAt:     j['created_at'] ?? '',
+    productName:   j['product_name'] ?? '—',
+    unit:          j['unit'] ?? 'pcs',
+    currentQty:    double.tryParse(j['current_qty']?.toString() ?? '0') ?? 0,
+    requestedBy:   j['requested_by'] ?? 'Unknown',
+    requesterRole: j['requester_role'] ?? 'cashier',
+    branchName:    j['branch_name'] ?? '—',
+  );
+}
+
+// ─── Branch Dashboard Stats ───────────────────────────────────────────────────
+class BranchStats {
+  final int    branchId;
+  final String branchName;
+  final double todayRevenue;
+  final int    todayTransactions;
+  final double todayProfit;
+  final double monthRevenue;
+  final double monthProfit;
+
+  const BranchStats({
+    required this.branchId, required this.branchName,
+    required this.todayRevenue, required this.todayTransactions,
+    required this.todayProfit,
+    required this.monthRevenue, required this.monthProfit,
+  });
+
+  factory BranchStats.fromJson(Map<String, dynamic> j) => BranchStats(
+    branchId:          int.tryParse(j['branch_id']?.toString() ?? '0') ?? 0,
+    branchName:        j['branch_name']?.toString() ?? '',
+    todayRevenue:      double.tryParse(j['today_revenue']?.toString() ?? '0') ?? 0,
+    todayTransactions: int.tryParse(j['today_transactions']?.toString() ?? '0') ?? 0,
+    todayProfit:       double.tryParse(j['today_profit']?.toString() ?? '0') ?? 0,
+    monthRevenue:      double.tryParse(j['month_revenue']?.toString() ?? '0') ?? 0,
+    monthProfit:       double.tryParse(j['month_profit']?.toString() ?? '0') ?? 0,
+  );
+}
+
+// ─── Cashier Shift Stats ──────────────────────────────────────────────────────
+class CashierStats {
+  final double myRevenue;
+  final int    myTransactions;
+  final List<Map<String, dynamic>> paymentMethods;
+
+  const CashierStats({
+    required this.myRevenue, required this.myTransactions,
+    required this.paymentMethods,
+  });
+
+  factory CashierStats.fromJson(Map<String, dynamic> j) => CashierStats(
+    myRevenue:      double.tryParse(j['my_revenue']?.toString() ?? '0') ?? 0,
+    myTransactions: int.tryParse(j['my_transactions']?.toString() ?? '0') ?? 0,
+    paymentMethods: (j['payment_methods'] as List<dynamic>? ?? [])
+        .map((m) => m as Map<String, dynamic>).toList(),
+  );
+
+  factory CashierStats.empty() => const CashierStats(
+    myRevenue: 0, myTransactions: 0, paymentMethods: [],
+  );
 }

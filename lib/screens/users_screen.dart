@@ -36,9 +36,6 @@ const _kModuleGroups = <String, List<(String, String)>>{
   ],
 };
 
-// All module keys in one flat list
-List<String> get _allModuleKeys =>
-    _kModuleGroups.values.expand((g) => g.map((e) => e.$1)).toList();
 
 class UsersScreen extends StatefulWidget {
   final String currentRole;
@@ -104,6 +101,65 @@ class _UsersScreenState extends State<UsersScreen>
         },
       ),
     );
+  }
+
+  void _openEdit(Map<String, dynamic> user) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditUserSheet(
+        user: user,
+        currentRole: widget.currentRole,
+        onSaved: () {
+          _load();
+          _showSnack('User updated!', AppColors.success);
+        },
+      ),
+    );
+  }
+
+  void _openResetPassword(Map<String, dynamic> user) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ResetPasswordSheet(
+        user: user,
+        onSaved: () => _showSnack('Password reset successfully!', AppColors.success),
+      ),
+    );
+  }
+
+  Future<void> _deleteUser(Map<String, dynamic> user) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete User?',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w900, fontSize: 16)),
+        content: Text(
+          'Delete ${user['name']}? This cannot be undone.',
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textMuted))),
+          TextButton(onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete',
+              style: GoogleFonts.inter(color: AppColors.danger, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final res = await ApiService.deleteUser(int.parse(user['id'].toString()));
+    if (!mounted) return;
+    if (res['ok'] == true) {
+      _load();
+      _showSnack(res['message'] ?? 'User deleted', AppColors.success);
+    } else {
+      _showSnack(res['error'] ?? 'Failed', AppColors.danger);
+    }
   }
 
   Future<void> _toggleStatus(Map<String, dynamic> user) async {
@@ -261,6 +317,9 @@ class _UsersScreenState extends State<UsersScreen>
                             roleLabel: _roleLabel(_users[i]['role'] ?? ''),
                             onPermissions: () => _openPermissions(_users[i]),
                             onToggle: () => _toggleStatus(_users[i]),
+                            onEdit: () => _openEdit(_users[i]),
+                            onDelete: () => _deleteUser(_users[i]),
+                            onResetPassword: () => _openResetPassword(_users[i]),
                           )),
                       )),
         ),
@@ -274,11 +333,12 @@ class _UserCard extends StatelessWidget {
   final Map<String, dynamic> user;
   final Color roleColor;
   final String roleLabel;
-  final VoidCallback onPermissions, onToggle;
+  final VoidCallback onPermissions, onToggle, onEdit, onDelete, onResetPassword;
 
   const _UserCard({
     required this.user, required this.roleColor, required this.roleLabel,
     required this.onPermissions, required this.onToggle,
+    required this.onEdit, required this.onDelete, required this.onResetPassword,
   });
 
   @override
@@ -368,54 +428,47 @@ class _UserCard extends StatelessWidget {
           ]),
 
           const SizedBox(height: 12),
-          // Permissions badge + action buttons
-          Row(children: [
-            GestureDetector(
-              onTap: onPermissions,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
+          // Permissions badge
+          GestureDetector(
+            onTap: onPermissions,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: configured
+                    ? AppColors.primary.withValues(alpha: 0.07)
+                    : AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
                   color: configured
-                      ? AppColors.primary.withValues(alpha: 0.07)
-                      : AppColors.warning.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: configured
-                        ? AppColors.primary.withValues(alpha: 0.2)
-                        : AppColors.warning.withValues(alpha: 0.3))),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(
-                    configured ? Icons.verified_user_rounded : Icons.shield_outlined,
-                    size: 13,
-                    color: configured ? AppColors.primary : AppColors.warning),
-                  const SizedBox(width: 5),
-                  Text(
-                    configured ? '$permCount modules' : 'Set permissions',
-                    style: GoogleFonts.inter(
-                      fontSize: 11, fontWeight: FontWeight.w700,
-                      color: configured ? AppColors.primary : AppColors.warning)),
-                ]),
-              ),
+                      ? AppColors.primary.withValues(alpha: 0.2)
+                      : AppColors.warning.withValues(alpha: 0.3))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(
+                  configured ? Icons.verified_user_rounded : Icons.shield_outlined,
+                  size: 13,
+                  color: configured ? AppColors.primary : AppColors.warning),
+                const SizedBox(width: 5),
+                Text(
+                  configured ? '$permCount modules' : 'Set permissions',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w700,
+                    color: configured ? AppColors.primary : AppColors.warning)),
+              ]),
             ),
+          ),
+          const SizedBox(height: 10),
+          // Action buttons row
+          Row(children: [
+            _IconBtn(icon: Icons.edit_rounded,   color: AppColors.primary, onTap: onEdit),
+            const SizedBox(width: 6),
+            _IconBtn(icon: Icons.lock_reset_rounded, color: const Color(0xFF0891B2), onTap: onResetPassword),
+            const SizedBox(width: 6),
+            _IconBtn(
+              icon: isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: isActive ? AppColors.danger : AppColors.success,
+              onTap: onToggle),
             const Spacer(),
-            GestureDetector(
-              onTap: onToggle,
-              child: Container(
-                width: 36, height: 32,
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? AppColors.danger.withValues(alpha: 0.07)
-                      : AppColors.success.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isActive
-                        ? AppColors.danger.withValues(alpha: 0.2)
-                        : AppColors.success.withValues(alpha: 0.3))),
-                child: Icon(
-                  isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 16,
-                  color: isActive ? AppColors.danger : AppColors.success)),
-            ),
+            _IconBtn(icon: Icons.delete_outline_rounded, color: AppColors.danger, onTap: onDelete),
           ]),
         ]),
       ),
@@ -990,6 +1043,466 @@ class _PermissionsSheetState extends State<_PermissionsSheet> {
                           const Icon(Icons.shield_rounded, color: Colors.white, size: 18),
                           const SizedBox(width: 8),
                           Text('Save Permissions',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15, fontWeight: FontWeight.w900,
+                              color: Colors.white, letterSpacing: -0.3)),
+                        ])),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Icon button helper ────────────────────────────────────────────────────────
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _IconBtn({required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 34, height: 32,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2))),
+      child: Icon(icon, size: 15, color: color)),
+  );
+}
+
+// ── Edit User Sheet ───────────────────────────────────────────────────────────
+class _EditUserSheet extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final String currentRole;
+  final VoidCallback onSaved;
+  const _EditUserSheet({required this.user, required this.currentRole, required this.onSaved});
+
+  @override
+  State<_EditUserSheet> createState() => _EditUserSheetState();
+}
+
+class _EditUserSheetState extends State<_EditUserSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  late String _role;
+  int? _branchId;
+  List<Map<String, dynamic>> _branches = [];
+  bool _saving  = false;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl  = TextEditingController(text: widget.user['name'] as String? ?? '');
+    _phoneCtrl = TextEditingController(text: widget.user['phone'] as String? ?? '');
+    _role      = widget.user['role'] as String? ?? 'cashier';
+    final bId  = widget.user['branch_id'];
+    _branchId  = bId != null ? int.tryParse(bId.toString()) : null;
+    _loadBranches();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose(); _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBranches() async {
+    final b = await ApiService.getManagementBranches();
+    if (mounted) setState(() { _branches = b; _loading = false; });
+  }
+
+  List<String> get _allowedRoles => widget.currentRole == 'owner'
+      ? ['cashier', 'accountant', 'stock_manager', 'manager']
+      : ['cashier', 'accountant', 'stock_manager'];
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) { setState(() => _error = 'Name is required'); return; }
+    setState(() { _saving = true; _error = null; });
+    HapticFeedback.mediumImpact();
+    try {
+      final res = await ApiService.editUser(
+        userId: int.parse(widget.user['id'].toString()),
+        name: name, phone: _phoneCtrl.text.trim(),
+        role: _role, branchId: _branchId,
+      );
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        HapticFeedback.heavyImpact();
+        Navigator.pop(context);
+        widget.onSaved();
+      } else {
+        setState(() { _saving = false; _error = res['error'] ?? 'Failed to update user'; });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _saving = false; _error = 'Network error'; });
+    }
+  }
+
+  String _roleLabel(String r) {
+    switch (r) {
+      case 'stock_manager': return 'Stock Manager';
+      case 'accountant':    return 'Accountant';
+      case 'manager':       return 'Manager';
+      case 'cashier':       return 'Cashier';
+      default: return r;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, Color(0xFF1A4A2E)]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.25),
+                blurRadius: 12, offset: const Offset(0, 4))]),
+            child: Row(children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(11)),
+                child: const Icon(Icons.edit_rounded, color: Colors.white, size: 20)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Edit User',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16, fontWeight: FontWeight.w900,
+                    color: Colors.white, letterSpacing: -0.3)),
+                Text(widget.user['name'] as String? ?? '',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.6))),
+              ])),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 18))),
+            ]),
+          ),
+          if (_loading)
+            const Padding(padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator(color: AppColors.primary)),
+          if (!_loading)
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _FL('Full Name *'), const SizedBox(height: 6),
+                  _FF(_nameCtrl, 'e.g. John Mwangi', Icons.person_outline_rounded,
+                    cap: TextCapitalization.words),
+                  const SizedBox(height: 14),
+                  _FL('Phone (optional)'), const SizedBox(height: 6),
+                  _FF(_phoneCtrl, '+255 7XX XXX XXX', Icons.phone_outlined,
+                    type: TextInputType.phone),
+                  const SizedBox(height: 14),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FL('Role'), const SizedBox(height: 6),
+                        _DropField(
+                          value: _role,
+                          items: _allowedRoles.map((r) =>
+                            DropdownMenuItem(value: r, child: Text(_roleLabel(r),
+                              style: GoogleFonts.inter(fontSize: 13,
+                                fontWeight: FontWeight.w600)))).toList(),
+                          onChanged: (v) { if (v != null) setState(() => _role = v); },
+                        ),
+                      ])),
+                    const SizedBox(width: 10),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FL('Branch'), const SizedBox(height: 6),
+                        _DropField<int?>(
+                          value: _branchId,
+                          items: [
+                            DropdownMenuItem<int?>(value: null,
+                              child: Text('All branches',
+                                style: GoogleFonts.inter(fontSize: 13,
+                                  color: AppColors.textMuted))),
+                            ..._branches.map((b) => DropdownMenuItem<int?>(
+                              value: b['id'] as int,
+                              child: Text(b['name'] as String,
+                                style: GoogleFonts.inter(fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                                maxLines: 1, overflow: TextOverflow.ellipsis))),
+                          ],
+                          onChanged: (v) => setState(() => _branchId = v),
+                        ),
+                      ])),
+                  ]),
+                  const SizedBox(height: 10),
+                ]),
+              ),
+            ),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerBg, borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.3))),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded, size: 16, color: AppColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
+                    color: AppColors.danger))),
+              ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            child: GestureDetector(
+              onTap: _saving ? null : _save,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: double.infinity, height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _saving
+                        ? [AppColors.primary.withValues(alpha: 0.5),
+                           AppColors.primaryMid.withValues(alpha: 0.5)]
+                        : [AppColors.primary, AppColors.primaryMid]),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: _saving ? [] : [BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                    blurRadius: 14, offset: const Offset(0, 5))]),
+                child: Center(
+                  child: _saving
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white))
+                      : Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Save Changes',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 15, fontWeight: FontWeight.w900,
+                              color: Colors.white, letterSpacing: -0.3)),
+                        ])),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Reset Password Sheet ──────────────────────────────────────────────────────
+class _ResetPasswordSheet extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final VoidCallback onSaved;
+  const _ResetPasswordSheet({required this.user, required this.onSaved});
+
+  @override
+  State<_ResetPasswordSheet> createState() => _ResetPasswordSheetState();
+}
+
+class _ResetPasswordSheetState extends State<_ResetPasswordSheet> {
+  final _passCtrl    = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  bool _showPass  = false;
+  bool _saving    = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _passCtrl.dispose(); _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final pass    = _passCtrl.text.trim();
+    final confirm = _confirmCtrl.text.trim();
+    if (pass.length < 6) { setState(() => _error = 'Password must be at least 6 characters'); return; }
+    if (pass != confirm) { setState(() => _error = 'Passwords do not match'); return; }
+    setState(() { _saving = true; _error = null; });
+    HapticFeedback.mediumImpact();
+    try {
+      final res = await ApiService.resetUserPassword(
+        userId: int.parse(widget.user['id'].toString()), password: pass);
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        HapticFeedback.heavyImpact();
+        Navigator.pop(context);
+        widget.onSaved();
+      } else {
+        setState(() { _saving = false; _error = res['error'] ?? 'Failed'; });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _saving = false; _error = 'Network error'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.65),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0891B2), Color(0xFF0E7490)]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [BoxShadow(
+                color: const Color(0xFF0891B2).withValues(alpha: 0.25),
+                blurRadius: 12, offset: const Offset(0, 4))]),
+            child: Row(children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(11)),
+                child: const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 20)),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Reset Password',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16, fontWeight: FontWeight.w900,
+                    color: Colors.white, letterSpacing: -0.3)),
+                Text(widget.user['name'] as String? ?? '',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.6))),
+              ])),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 18))),
+            ]),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _FL('New Password *'), const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.bg, borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border)),
+                  child: Row(children: [
+                    const Padding(padding: EdgeInsets.only(left: 12),
+                      child: Icon(Icons.lock_outline_rounded,
+                        size: 16, color: AppColors.primary)),
+                    Expanded(child: TextField(
+                      controller: _passCtrl,
+                      obscureText: !_showPass,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: 'Min 6 characters',
+                        hintStyle: TextStyle(
+                          color: AppColors.textMuted.withValues(alpha: 0.6), fontSize: 13),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10)))),
+                    GestureDetector(
+                      onTap: () => setState(() => _showPass = !_showPass),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Icon(
+                          _showPass ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          size: 18, color: AppColors.textMuted))),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                _FL('Confirm Password *'), const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.bg, borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border)),
+                  child: Row(children: [
+                    const Padding(padding: EdgeInsets.only(left: 12),
+                      child: Icon(Icons.lock_outline_rounded,
+                        size: 16, color: AppColors.primary)),
+                    Expanded(child: TextField(
+                      controller: _confirmCtrl,
+                      obscureText: !_showPass,
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: 'Re-enter password',
+                        hintStyle: TextStyle(
+                          color: AppColors.textMuted.withValues(alpha: 0.6), fontSize: 13),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10)))),
+                  ]),
+                ),
+                const SizedBox(height: 10),
+              ]),
+            ),
+          ),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerBg, borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.3))),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded, size: 16, color: AppColors.danger),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_error!,
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
+                    color: AppColors.danger))),
+              ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            child: GestureDetector(
+              onTap: _saving ? null : _save,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: double.infinity, height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _saving
+                        ? [const Color(0xFF0891B2).withValues(alpha: 0.5),
+                           const Color(0xFF0E7490).withValues(alpha: 0.5)]
+                        : [const Color(0xFF0891B2), const Color(0xFF0E7490)]),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: _saving ? [] : [BoxShadow(
+                    color: const Color(0xFF0891B2).withValues(alpha: 0.3),
+                    blurRadius: 14, offset: const Offset(0, 5))]),
+                child: Center(
+                  child: _saving
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white))
+                      : Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text('Reset Password',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 15, fontWeight: FontWeight.w900,
                               color: Colors.white, letterSpacing: -0.3)),

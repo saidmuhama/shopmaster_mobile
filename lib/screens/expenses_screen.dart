@@ -18,6 +18,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   double   _total  = 0;
   int      _count  = 0;
   bool     _loading = true;
+  String?  _error;
 
   static const _filters = [
     ('today', 'Today'),
@@ -33,17 +34,31 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
       final res = await ApiService.getExpenses(filter: _filter);
       if (!mounted) return;
       setState(() {
         _expenses = List<Map<String, dynamic>>.from(res['expenses'] ?? []);
-        _total    = (res['total'] as num?)?.toDouble() ?? 0;
-        _count    = (res['count'] as num?)?.toInt()   ?? 0;
+        _total    = _toDouble(res['total']);
+        _count    = _toInt(res['count']);
+        _loading  = false;
       });
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = 'Failed to load expenses. Pull to refresh.'; });
+    }
+  }
+
+  static double _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse(v?.toString() ?? '') ?? 0.0;
+  }
+
+  static int _toInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
   }
 
   Future<void> _loadCategories() async {
@@ -55,7 +70,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   String _fmtMoney(dynamic v) =>
-      'TZS ${NumberFormat('#,###').format((v as num?)?.toDouble() ?? 0)}';
+      'TZS ${NumberFormat('#,###').format(_toDouble(v).toInt())}';
 
   String _fmtDate(String? raw) {
     if (raw == null) return '';
@@ -150,9 +165,35 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _expenses.isEmpty
-                    ? _EmptyState()
-                    : ListView.builder(
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.wifi_off_rounded,
+                              size: 48, color: Colors.red),
+                            const SizedBox(height: 14),
+                            Text(_error!,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 13, color: AppColors.textMuted)),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _load,
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12))),
+                            ),
+                          ]),
+                        ),
+                      )
+                    : _expenses.isEmpty
+                        ? _EmptyState()
+                        : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                         itemCount: _expenses.length,
                         itemBuilder: (_, i) => _ExpenseCard(
