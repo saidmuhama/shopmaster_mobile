@@ -36,7 +36,8 @@ class _StockAdjustmentsScreenState extends State<StockAdjustmentsScreen> {
   ];
 
   bool get _isManager =>
-      _user?.role == 'owner' || _user?.role == 'manager';
+      (_user?.role == 'owner' || _user?.role == 'manager') &&
+      (_user?.canAccess('stock') ?? false);
 
   List<PendingAdjustment> get _filteredPending =>
       _branchId == null

@@ -79,7 +79,9 @@ class _StockScreenState extends State<StockScreen>
   }
 
   // Only owner / manager can edit product details
-  bool get _canEdit => _user != null && ['owner', 'manager'].contains(_user!.role);
+  bool get _canEdit => _user != null &&
+      ['owner', 'manager'].contains(_user!.role) &&
+      _user!.canAccess('stock');
 
   // All authenticated users can adjust stock and add products
   bool get _canAdjust => true;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 
@@ -19,6 +20,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   int      _count  = 0;
   bool     _loading = true;
   String?  _error;
+  AuthUser? _user;
+
+  bool get _canAddExpense => _user?.canAccess('expenses') ?? true;
 
   static const _filters = [
     ('today', 'Today'),
@@ -30,7 +34,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   void initState() {
     super.initState();
+    _loadUser();
     _load();
+  }
+
+  Future<void> _loadUser() async {
+    final u = await ApiService.getCachedUser();
+    if (mounted) setState(() => _user = u);
   }
 
   Future<void> _load() async {
@@ -205,7 +215,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ),
         ]),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _canAddExpense ? FloatingActionButton.extended(
         onPressed: () async {
           await _loadCategories();
           if (!mounted) return;
@@ -223,7 +233,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         label: Text('Add Expense',
           style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
+      ) : null,
     );
   }
 }
