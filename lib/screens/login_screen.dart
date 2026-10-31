@@ -101,8 +101,34 @@ class _LoginScreenState extends State<LoginScreen>
         ));
       } else {
         HapticFeedback.heavyImpact();
-        setState(() => _error = res['error'] ?? 'Invalid email or password.');
-        _shakeCtrl.forward(from: 0);
+        final code = res['code']?.toString() ?? '';
+        if (code == 'subscription_expired') {
+          // Show a non-dismissable dialog for subscription expiry
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFF4A261), size: 28),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Subscription Expired',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              ]),
+              content: Text(res['error'] ?? 'Your subscription has expired. Please renew to continue.',
+                  style: const TextStyle(fontSize: 14, height: 1.5)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK', style: TextStyle(color: Color(0xFF0F2D1A), fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          );
+        } else {
+          setState(() => _error = res['error'] ?? 'Invalid email or password.');
+          _shakeCtrl.forward(from: 0);
+        }
       }
     } catch (_) {
       setState(() => _error = 'Connection error. Check your network.');

@@ -1,29 +1,44 @@
 // ─── Auth ────────────────────────────────────────────────────────────────────
 class AuthUser {
-  final int    id;
-  final int    tenantId;
-  final int    branchId;
-  final String name;
-  final String email;
-  final String role;
-  final String currency;
-  final String shopName;
+  final int          id;
+  final int          tenantId;
+  final int          branchId;
+  final String       name;
+  final String       email;
+  final String       role;
+  final String       currency;
+  final String       shopName;
+  final String       subscription;
+  /// null = full access; List = restricted to these module keys only
+  final List<String>? allowedModules;
 
   const AuthUser({
     required this.id, required this.tenantId, required this.branchId,
     required this.name, required this.email, required this.role,
     required this.currency, required this.shopName,
+    this.subscription = 'trial',
+    this.allowedModules,
   });
 
+  /// Returns true when this user can access the given module key.
+  bool canAccess(String module) {
+    if (allowedModules == null) return true;
+    return allowedModules!.contains(module);
+  }
+
   factory AuthUser.fromJson(Map<String, dynamic> j) => AuthUser(
-    id: j['user_id'] ?? 0,
+    id:       j['user_id']  ?? 0,
     tenantId: j['tenant_id'] ?? 0,
     branchId: j['branch_id'] ?? 0,
-    name: j['name'] ?? '',
-    email: j['email'] ?? '',
-    role: j['role'] ?? 'owner',
+    name:     j['name']     ?? '',
+    email:    j['email']    ?? '',
+    role:     j['role']     ?? 'owner',
     currency: j['currency'] ?? 'TZS',
     shopName: j['shop_name'] ?? 'My Shop',
+    subscription: j['subscription']?.toString() ?? 'trial',
+    allowedModules: j['allowed_modules'] == null
+        ? null
+        : List<String>.from(j['allowed_modules'] as List),
   );
 }
 

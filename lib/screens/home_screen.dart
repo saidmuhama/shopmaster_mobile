@@ -72,28 +72,40 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
 
-    // Cashier: POS → Sales → Stock → Profile (4 tabs, branch-locked)
-    // Owner/Manager/StockManager: Dashboard → Sales → POS → Stock → Reports → Profile (6 tabs)
+    // Cashier: POS → Sales → Stock → Adjustments → Profile (filtered by permissions)
+    // Owner/Manager/StockManager: Dashboard → Sales → POS → Stock → Reports → Profile (filtered by permissions)
     final List<Widget> screens;
     final List<_NavItem> navItems;
 
     if (_isCashier) {
-      screens = [
+      // All candidate tabs for cashier role with their module gate keys.
+      // null key = always visible (Profile).
+      final List<Widget> allScreens = [
         PosScreen(user: user, tabNotifier: _tabNotifier),
         SalesScreen(tabNotifier: _tabNotifier),
         StockScreen(tabNotifier: _tabNotifier),
         const StockAdjustmentsScreen(),
         ProfileScreen(user: user),
       ];
-      navItems = const [
-        _NavItem(Icons.point_of_sale_rounded,  Icons.point_of_sale_outlined,  'POS'),
-        _NavItem(Icons.receipt_rounded,        Icons.receipt_outlined,        'Sales'),
-        _NavItem(Icons.inventory_2_rounded,    Icons.inventory_2_outlined,    'Products'),
-        _NavItem(Icons.history_rounded,        Icons.history_outlined,        'Adjustments'),
-        _NavItem(Icons.person_rounded,         Icons.person_outlined,         'Profile'),
+      const List<_NavItem> allNav = [
+        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, 'POS'),
+        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       'Sales'),
+        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   'Products'),
+        _NavItem(Icons.history_rounded,       Icons.history_outlined,       'Adjustments'),
+        _NavItem(Icons.person_rounded,        Icons.person_outlined,        'Profile'),
       ];
+      const List<String?> allKeys = [
+        'pos', 'sales_history', 'stock', 'stock', null,
+      ];
+      final allowed = List.generate(allScreens.length, (i) => i)
+          .where((i) => allKeys[i] == null || user.canAccess(allKeys[i]!))
+          .toList();
+      screens  = allowed.map((i) => allScreens[i]).toList();
+      navItems = allowed.map((i) => allNav[i]).toList();
     } else {
-      screens = [
+      // All candidate tabs for owner/manager/stock_manager with their module gate keys.
+      // null key = always visible (Dashboard home, Profile).
+      final List<Widget> allScreens = [
         DashboardScreen(user: user, onTabSwitch: (i) => setState(() => _tab = i), tabNotifier: _tabNotifier),
         SalesScreen(tabNotifier: _tabNotifier),
         PosScreen(user: user, tabNotifier: _tabNotifier),
@@ -101,14 +113,22 @@ class _HomeScreenState extends State<HomeScreen>
         ReportsScreen(user: user),
         ProfileScreen(user: user),
       ];
-      navItems = const [
-        _NavItem(Icons.dashboard_rounded,      Icons.dashboard_outlined,      'Dashboard'),
-        _NavItem(Icons.receipt_rounded,        Icons.receipt_outlined,        'Sales'),
-        _NavItem(Icons.point_of_sale_rounded,  Icons.point_of_sale_outlined,  'POS'),
-        _NavItem(Icons.inventory_2_rounded,    Icons.inventory_2_outlined,    'Stock'),
-        _NavItem(Icons.bar_chart_rounded,      Icons.bar_chart_outlined,      'Reports'),
-        _NavItem(Icons.person_rounded,         Icons.person_outlined,         'Profile'),
+      const List<_NavItem> allNav = [
+        _NavItem(Icons.dashboard_rounded,     Icons.dashboard_outlined,     'Dashboard'),
+        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       'Sales'),
+        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, 'POS'),
+        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   'Stock'),
+        _NavItem(Icons.bar_chart_rounded,     Icons.bar_chart_outlined,     'Reports'),
+        _NavItem(Icons.person_rounded,        Icons.person_outlined,        'Profile'),
       ];
+      const List<String?> allKeys = [
+        null, 'sales_history', 'pos', 'stock', 'report_sales', null,
+      ];
+      final allowed = List.generate(allScreens.length, (i) => i)
+          .where((i) => allKeys[i] == null || user.canAccess(allKeys[i]!))
+          .toList();
+      screens  = allowed.map((i) => allScreens[i]).toList();
+      navItems = allowed.map((i) => allNav[i]).toList();
     }
 
     // Guard tab index in case it's stale after role change
