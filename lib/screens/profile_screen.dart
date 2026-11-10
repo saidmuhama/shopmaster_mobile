@@ -104,6 +104,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     final canViewFinance = isManager || user.role == 'accountant';
 
     final resp = Responsive.of(context);
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+    if (isTablet) return _buildTabletLayout(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: Center(
@@ -237,6 +239,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                         AppColors.infoBg,
                         onTap: () => _launchUrl('https://mdspro.co.tz')),
                       _ActionTile(
+                        Icons.payment_rounded,
+                        'How to Pay',
+                        subtitle: 'Send payment via M-Pesa or Bank',
+                        const Color(0xFF059669),
+                        const Color(0xFFF0FDF4),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => const HowToPayScreen()))),
+                      _ActionTile(
                         Icons.headset_mic_rounded,
                         'Help & Support',
                         subtitle: 'Call or chat with our support team',
@@ -319,6 +329,293 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // ── Tablet layout ─────────────────────────────────────────────────────────────
+  Widget _buildTabletLayout(BuildContext context) {
+    final user = widget.user;
+    final initials = user.name.isNotEmpty ? user.name[0].toUpperCase() : 'O';
+    final roleLabel = user.role[0].toUpperCase() + user.role.substring(1);
+    final isManager = user.role == 'owner' || user.role == 'manager';
+    final canViewFinance = isManager || user.role == 'accountant';
+    final resp = Responsive.of(context);
+
+    Widget leftCol = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (isManager) ...[
+        StaggeredItem(index: 0, controller: _ctrl,
+          child: _Section(
+            title: 'Team Management',
+            accentColor: const Color(0xFF7C3AED),
+            items: [
+              _ActionTile(Icons.manage_accounts_rounded, 'Users & Permissions',
+                subtitle: 'Manage staff, roles and access controls',
+                const Color(0xFF7C3AED), const Color(0xFFF3F0FF),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => UsersScreen(currentRole: user.role)))),
+              _ActionTile(Icons.store_rounded, 'Branch Management',
+                subtitle: 'Add and configure store locations',
+                AppColors.primary, AppColors.primary.withValues(alpha: 0.08),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const BranchesScreen()))),
+            ],
+          )),
+        const SizedBox(height: 14),
+      ],
+      StaggeredItem(index: isManager ? 2 : 0, controller: _ctrl,
+        child: _Section(
+          title: 'Security',
+          accentColor: AppColors.primary,
+          items: [
+            _PinTile(hasPin: _hasPin, onTap: () => _onPinTileTap(context)),
+            _ActionTile(Icons.lock_outline_rounded, 'Change Password',
+              subtitle: 'Update your account password',
+              AppColors.primary, AppColors.primary.withValues(alpha: 0.08),
+              onTap: () => _showChangePassword(context)),
+          ],
+        )),
+      const SizedBox(height: 14),
+      StaggeredItem(index: isManager ? 3 : 1, controller: _ctrl,
+        child: _Section(
+          title: 'Notifications',
+          accentColor: const Color(0xFF2563EB),
+          items: [
+            _NotificationTile(
+              token: _fcmToken, status: _fcmStatus,
+              isRegistering: _isRegistering, onToggle: _onNotificationToggle),
+          ],
+        )),
+    ]);
+
+    Widget rightCol = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (canViewFinance) ...[
+        StaggeredItem(index: isManager ? 1 : 0, controller: _ctrl,
+          child: _Section(
+            title: 'Finance',
+            accentColor: const Color(0xFFD97706),
+            items: [
+              _ActionTile(Icons.receipt_long_rounded, 'Expenses',
+                subtitle: 'Track and categorize business costs',
+                const Color(0xFFD97706), const Color(0xFFFFFBEB),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const ExpensesScreen()))),
+            ],
+          )),
+        const SizedBox(height: 14),
+      ],
+      StaggeredItem(index: 4, controller: _ctrl,
+        child: _Section(
+          title: 'Links & Support',
+          accentColor: AppColors.textSecondary,
+          items: [
+            _ActionTile(Icons.open_in_browser_rounded, 'Web Dashboard',
+              subtitle: 'Open full interface at mdspro.co.tz',
+              AppColors.info, AppColors.infoBg,
+              onTap: () => _launchUrl('https://mdspro.co.tz')),
+            _ActionTile(Icons.payment_rounded, 'How to Pay',
+              subtitle: 'Send payment via M-Pesa or Bank',
+              const Color(0xFF059669), const Color(0xFFF0FDF4),
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const HowToPayScreen()))),
+            _ActionTile(Icons.headset_mic_rounded, 'Help & Support',
+              subtitle: 'Call or chat with our support team',
+              const Color(0xFF16A34A), const Color(0xFFECFDF5),
+              onTap: () => _openSupport(context)),
+            _ActionTile(Icons.info_outline_rounded, 'About MDSPro',
+              subtitle: 'Version 1.0.15 · mdspro.co.tz',
+              AppColors.textMuted, AppColors.bg,
+              onTap: () => _showAbout(context)),
+          ],
+        )),
+      const SizedBox(height: 14),
+      StaggeredItem(index: 5, controller: _ctrl,
+        child: PressScale(
+          onTap: () => _confirmLogout(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.dangerBg,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.danger.withValues(alpha: 0.25))),
+            child: Row(children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.logout_rounded, color: AppColors.danger, size: 19)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Sign Out',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.danger)),
+                const SizedBox(height: 1),
+                Text('You will need to log in again',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w500,
+                    color: AppColors.danger.withValues(alpha: 0.55))),
+              ])),
+              Icon(Icons.chevron_right_rounded,
+                color: AppColors.danger.withValues(alpha: 0.5), size: 18),
+            ]),
+          ),
+        )),
+    ]);
+
+    final hPad = resp.isLargeTablet ? 28.0 : 20.0;
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _buildTabletHero(initials, roleLabel, user)),
+          SliverToBoxAdapter(child: const SizedBox(height: 24)),
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: hPad),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: leftCol),
+                  const SizedBox(width: 16),
+                  Expanded(child: rightCol),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 28, bottom: 36),
+              child: Center(
+                child: Text('MDSPro  ·  v1.0.15  ·  mdspro.co.tz',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted))),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tablet hero ───────────────────────────────────────────────────────────────
+  Widget _buildTabletHero(String initials, String roleLabel, AuthUser user) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF050f09), Color(0xFF0F2D1A), Color(0xFF1a5c32)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight)),
+      child: Stack(children: [
+        Positioned(top: -60, right: -20,
+          child: PulsingOrb(size: 280,
+            color: AppColors.accent.withValues(alpha: 0.07),
+            duration: const Duration(seconds: 6))),
+        Positioned(bottom: 20, left: -40,
+          child: PulsingOrb(size: 200,
+            color: AppColors.primaryLight.withValues(alpha: 0.15),
+            duration: const Duration(seconds: 9))),
+
+        SafeArea(
+          bottom: false,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 36, 32, 28),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Larger avatar
+                  FadeTransition(
+                    opacity: _ctrl,
+                    child: Stack(alignment: Alignment.center, children: [
+                      Container(
+                        width: 134, height: 134,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.accent.withValues(alpha: 0.2), width: 7))),
+                      Container(
+                        width: 118, height: 118,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [AppColors.accent, AppColors.accentDark],
+                            begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          boxShadow: [BoxShadow(
+                            color: AppColors.accent.withValues(alpha: 0.45),
+                            blurRadius: 36, spreadRadius: 4, offset: const Offset(0, 12))]),
+                        child: Center(
+                          child: Text(initials,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 48, fontWeight: FontWeight.w900,
+                              color: Colors.white)))),
+                      Positioned(
+                        bottom: 6, right: 6,
+                        child: Container(
+                          width: 20, height: 20,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF22C55E),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFF0F2D1A), width: 2.5)))),
+                    ]),
+                  ),
+
+                  const SizedBox(width: 28),
+
+                  // Name / info (horizontal)
+                  Expanded(
+                    child: SlideTransition(
+                      position: Tween<Offset>(begin: const Offset(0.15, 0), end: Offset.zero)
+                          .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic)),
+                      child: FadeTransition(
+                        opacity: CurvedAnimation(parent: _ctrl, curve: const Interval(0.2, 1.0)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(user.name,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 28, fontWeight: FontWeight.w900,
+                              color: Colors.white, letterSpacing: -0.5)),
+                          const SizedBox(height: 5),
+                          Text(user.email,
+                            style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.42))),
+                          const SizedBox(height: 14),
+                          Wrap(spacing: 8, runSpacing: 8, children: [
+                            _Chip(roleLabel,
+                              AppColors.accent.withValues(alpha: 0.2), AppColors.accent,
+                              iconData: Icons.verified_rounded),
+                            _Chip(user.shopName,
+                              Colors.white.withValues(alpha: 0.1), Colors.white,
+                              iconData: Icons.storefront_rounded),
+                            _Chip(user.currency,
+                              Colors.white.withValues(alpha: 0.1),
+                              Colors.white.withValues(alpha: 0.7)),
+                          ]),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Stats bar
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.22),
+                border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08)))),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(children: [
+                _HeroStat(label: 'Role', value: roleLabel, icon: Icons.badge_outlined),
+                const _HeroStatDivider(),
+                _HeroStat(label: 'Shop', value: user.shopName, icon: Icons.storefront_outlined),
+                const _HeroStatDivider(),
+                _HeroStat(label: 'Currency', value: user.currency, icon: Icons.payments_outlined),
+              ]),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 
@@ -1313,4 +1610,252 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       ),
     );
   }
+}
+
+// ── How to Pay Screen ─────────────────────────────────────────────────────────
+class HowToPayScreen extends StatelessWidget {
+  const HowToPayScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F4F2),
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text('How to Pay',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17)),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+        children: [
+          // Header info
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F2D1A), Color(0xFF1B4332)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [BoxShadow(
+                color: const Color(0xFF0F2D1A).withValues(alpha: 0.3),
+                blurRadius: 16, offset: const Offset(0, 6))]),
+            child: Row(children: [
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  shape: BoxShape.circle),
+                child: const Icon(Icons.payments_rounded,
+                  color: Colors.white, size: 22)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Send Payment To',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.5), letterSpacing: 0.5)),
+                const SizedBox(height: 2),
+                Text('SAID SAID',
+                  style: GoogleFonts.inter(
+                    fontSize: 18, fontWeight: FontWeight.w900,
+                    color: Colors.white)),
+                Text('MDSPro Subscription Payment',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.5))),
+              ])),
+            ]),
+          ),
+
+          const SizedBox(height: 20),
+
+          // M-Pesa card
+          _PayMethodCard(
+            logo: _MpesaLogo(),
+            networkName: 'M-Pesa',
+            networkColor: const Color(0xFF00A651),
+            bgColor: const Color(0xFFF0FDF4),
+            borderColor: const Color(0xFF00A651),
+            number: '0765 131 788',
+            accountName: 'SAID SAID',
+            steps: const [
+              'Open M-Pesa on your Vodacom line',
+              'Select "Lipa na M-Pesa" → "Send Money"',
+              'Enter number: 0765131788',
+              'Enter amount and confirm',
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Selcom / Bank card
+          _PayMethodCard(
+            logo: _SelcomLogo(),
+            networkName: 'Selcom / Bank',
+            networkColor: const Color(0xFF005BAA),
+            bgColor: const Color(0xFFEFF6FF),
+            borderColor: const Color(0xFF005BAA),
+            number: '0765 131 788',
+            accountName: 'SAID SAID',
+            steps: const [
+              'Open Selcom or your bank app',
+              'Select "Send Money" or "Mobile Transfer"',
+              'Enter number: 0765131788',
+              'Enter amount and confirm',
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Note
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.info_outline_rounded,
+                size: 18, color: Color(0xFFD97706)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                'After payment, send your receipt to our support team via WhatsApp or call us to activate your subscription.',
+                style: GoogleFonts.inter(
+                  fontSize: 12, color: const Color(0xFF92400E), height: 1.5))),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PayMethodCard extends StatelessWidget {
+  final Widget logo;
+  final String networkName;
+  final Color networkColor, bgColor, borderColor;
+  final String number, accountName;
+  final List<String> steps;
+
+  const _PayMethodCard({
+    required this.logo, required this.networkName,
+    required this.networkColor, required this.bgColor,
+    required this.borderColor, required this.number,
+    required this.accountName, required this.steps,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor.withValues(alpha: 0.2)),
+        boxShadow: [BoxShadow(
+          color: networkColor.withValues(alpha: 0.06),
+          blurRadius: 12, offset: const Offset(0, 4))]),
+      child: Column(children: [
+        // Header band
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border(bottom: BorderSide(color: borderColor.withValues(alpha: 0.1)))),
+          child: Row(children: [
+            logo,
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(networkName,
+                style: GoogleFonts.inter(
+                  fontSize: 16, fontWeight: FontWeight.w800,
+                  color: networkColor)),
+              Text('Mobile Money', style: GoogleFonts.inter(
+                fontSize: 11, color: networkColor.withValues(alpha: 0.6))),
+            ]),
+            const Spacer(),
+            // Number chip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: networkColor,
+                borderRadius: BorderRadius.circular(20)),
+              child: Text(number,
+                style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w800,
+                  color: Colors.white, letterSpacing: 0.5)),
+            ),
+          ]),
+        ),
+        // Account name
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(children: [
+            const Icon(Icons.person_outline_rounded, size: 15, color: Color(0xFF6B7280)),
+            const SizedBox(width: 6),
+            Text('Account Name:',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF6B7280))),
+            const SizedBox(width: 6),
+            Text(accountName,
+              style: GoogleFonts.inter(
+                fontSize: 13, fontWeight: FontWeight.w800,
+                color: const Color(0xFF111827))),
+          ]),
+        ),
+        // Steps
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(children: steps.asMap().entries.map((e) =>
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  width: 20, height: 20,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: networkColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle),
+                  child: Text('${e.key + 1}',
+                    style: GoogleFonts.inter(
+                      fontSize: 10, fontWeight: FontWeight.w800,
+                      color: networkColor))),
+                const SizedBox(width: 10),
+                Expanded(child: Text(e.value,
+                  style: GoogleFonts.inter(
+                    fontSize: 12, color: const Color(0xFF374151), height: 1.4))),
+              ]),
+            ),
+          ).toList()),
+        ),
+      ]),
+    );
+  }
+}
+
+class _MpesaLogo extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40, height: 40,
+    decoration: BoxDecoration(
+      color: const Color(0xFF00A651),
+      borderRadius: BorderRadius.circular(10)),
+    alignment: Alignment.center,
+    child: Text('M', style: GoogleFonts.inter(
+      fontSize: 20, fontWeight: FontWeight.w900,
+      color: Colors.white)),
+  );
+}
+
+class _SelcomLogo extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40, height: 40,
+    decoration: BoxDecoration(
+      color: const Color(0xFF005BAA),
+      borderRadius: BorderRadius.circular(10)),
+    alignment: Alignment.center,
+    child: Text('S', style: GoogleFonts.inter(
+      fontSize: 20, fontWeight: FontWeight.w900,
+      color: Colors.white)),
+  );
 }

@@ -75,6 +75,33 @@ class _SalesScreenState extends State<SalesScreen>
 
   int get _paidCount => _sales.where((s) => s.isPaid).length;
 
+  void _showExportSheet() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ExportSheet(
+        title: 'Export Sales Report',
+        onExport: (format) async {
+          Navigator.pop(context);
+          final today = DateTime.now();
+          final date = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+          final url = ApiService.exportUrl(type: 'sales', format: format, date: date);
+          final uri = Uri.parse(url);
+          try {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not open export. Try again.',
+                  style: GoogleFonts.inter(fontSize: 13))));
+            }
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,22 +120,22 @@ class _SalesScreenState extends State<SalesScreen>
                         return RefreshIndicator(
                           onRefresh: _load,
                           color: AppColors.primary,
-                          child: resp.isLargeTablet
+                          child: resp.isTablet
                               ? GridView.builder(
-                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
+                                  padding: EdgeInsets.fromLTRB(resp.hPad, 8, resp.hPad, 24),
+                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: resp.isLargeTablet ? 2 : 2,
                                     crossAxisSpacing: 12,
                                     mainAxisSpacing: 12,
-                                    childAspectRatio: 3.2,
+                                    childAspectRatio: resp.isLargeTablet ? 3.2 : 2.8,
                                   ),
                                   itemCount: _sales.length,
-                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i]),
+                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i], onDeleted: _load),
                                 )
                               : ListView.builder(
                                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                                   itemCount: _sales.length,
-                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i]),
+                                  itemBuilder: (_, i) => _SaleCard(sale: _sales[i], onDeleted: _load),
                                 ),
                         );
                       }),
@@ -153,6 +180,19 @@ class _SalesScreenState extends State<SalesScreen>
                       fontWeight: FontWeight.w500)),
               ]),
             ),
+            // Export button
+            GestureDetector(
+              onTap: _showExportSheet,
+              child: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.25))),
+                child: const Icon(Icons.download_rounded,
+                  color: AppColors.accent, size: 18)),
+            ),
+            const SizedBox(width: 8),
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -389,7 +429,8 @@ class _SummaryPill extends StatelessWidget {
 // ── Sale Card ────────────────────────────────────────────────────────────────
 class _SaleCard extends StatelessWidget {
   final Sale sale;
-  const _SaleCard({required this.sale});
+  final VoidCallback? onDeleted;
+  const _SaleCard({required this.sale, this.onDeleted});
 
   static Color _payColor(String method) {
     switch (method) {
@@ -419,12 +460,14 @@ class _SaleCard extends StatelessWidget {
 
   void _openDetail(BuildContext context) {
     HapticFeedback.selectionClick();
-    showModalBottomSheet(
+    showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _InvoiceDetailSheet(sale: sale),
-    );
+    ).then((result) {
+      if (result == 'deleted') onDeleted?.call();
+    });
   }
 
   @override
@@ -547,6 +590,9 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
   bool _loading = true;
   String? _error;
   late AnimationController _ctrl;
+  String? _userRole;
+  bool _deleting = false;
+  String? _deleteError;
 
   @override
   void initState() {
@@ -554,6 +600,12 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
     _ctrl = AnimationController(vsync: this,
       duration: const Duration(milliseconds: 600));
     _load();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final u = await ApiService.getCachedUser();
+    if (mounted) setState(() => _userRole = u?.role);
   }
 
   @override
@@ -648,36 +700,88 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
             ]),
             const SizedBox(height: 14),
             // ── Action chips ──────────────────────────────────────────────
-            Row(children: [
-              _HeaderChip(
-                icon: Icons.copy_all_rounded,
-                label: 'Copy #',
-                onTap: _copyInvoiceNo,
-              ),
-              const SizedBox(width: 8),
-              _HeaderChip(
-                icon: Icons.share_rounded,
-                label: 'Share',
-                onTap: _shareInvoice,
-              ),
-              if (_detail != null && _detail!.custPhone.isNotEmpty) ...[
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                _HeaderChip(
+                  icon: Icons.copy_all_rounded,
+                  label: 'Copy #',
+                  onTap: _copyInvoiceNo,
+                ),
                 const SizedBox(width: 8),
                 _HeaderChip(
-                  icon: Icons.phone_rounded,
-                  label: 'Call',
-                  onTap: _callCustomer,
+                  icon: Icons.share_rounded,
+                  label: 'Share',
+                  onTap: _shareInvoice,
                 ),
-              ],
-              const SizedBox(width: 8),
-              _HeaderChip(
-                icon: Icons.edit_rounded,
-                label: 'Amend',
-                onTap: _openAmendSheet,
-                accent: true,
-              ),
-            ]),
+                if (_detail != null && _detail!.custPhone.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _HeaderChip(
+                    icon: Icons.phone_rounded,
+                    label: 'Call',
+                    onTap: _callCustomer,
+                  ),
+                ],
+                const SizedBox(width: 8),
+                _HeaderChip(
+                  icon: Icons.edit_rounded,
+                  label: 'Amend',
+                  onTap: _openAmendSheet,
+                  accent: true,
+                ),
+                if (_userRole == 'owner') ...[
+                  const SizedBox(width: 8),
+                  _HeaderChip(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete',
+                    onTap: _confirmDelete,
+                    danger: true,
+                  ),
+                ],
+              ]),
+            ),
           ]),
         ),
+
+        // ── Inline delete feedback (always visible — snackbars are hidden behind modal) ──
+        if (_deleting)
+          Container(
+            color: AppColors.bg,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(children: [
+              const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5, color: AppColors.accent)),
+              const SizedBox(width: 12),
+              Text('Deleting invoice…',
+                style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary)),
+            ]),
+          ),
+        if (_deleteError != null)
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.3))),
+            child: Row(children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.red, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_deleteError!,
+                  style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w600,
+                    color: Colors.red))),
+              GestureDetector(
+                onTap: () => setState(() => _deleteError = null),
+                child: const Icon(Icons.close_rounded,
+                  color: Colors.red, size: 16)),
+            ]),
+          ),
 
         // ── Content ─────────────────────────────────────────────────────────
         Flexible(
@@ -817,6 +921,78 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
         },
       ),
     );
+  }
+
+  Future<void> _confirmDelete() async {
+    if (_deleting) return;
+    HapticFeedback.mediumImpact();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.delete_outline_rounded,
+              color: Colors.red, size: 20)),
+          const SizedBox(width: 12),
+          Text('Delete Invoice',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 16, fontWeight: FontWeight.w900,
+              color: AppColors.textPrimary)),
+        ]),
+        content: Text(
+          'Delete invoice ${widget.sale.invoiceNo}? This will reverse all stock movements and cannot be undone.',
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10))),
+            child: Text('Delete',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w900))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Show loading inside the sheet — always visible to the user
+    setState(() { _deleting = true; _deleteError = null; });
+
+    try {
+      final res = await ApiService.deleteSale(widget.sale.id);
+      if (!mounted) return;
+      if (res['ok'] == true) {
+        Navigator.pop(context, 'deleted');
+      } else {
+        // Show error INSIDE the sheet so it's never hidden by the modal barrier
+        setState(() {
+          _deleting = false;
+          _deleteError = res['error']?.toString() ?? 'Delete failed';
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() {
+        _deleting = false;
+        _deleteError = 'Network error. Please try again.';
+      });
+    }
   }
 
   void _openCollectSheet() {
@@ -1478,38 +1654,49 @@ class _HeaderChip extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool accent;
+  final bool danger;
   const _HeaderChip({
     required this.icon,
     required this.label,
     required this.onTap,
     this.accent = false,
+    this.danger = false,
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: accent
-            ? AppColors.accent.withValues(alpha: 0.25)
-            : Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: accent
-              ? AppColors.accent.withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.2))),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 13,
-          color: accent ? AppColors.accent : Colors.white.withValues(alpha: 0.85)),
-        const SizedBox(width: 5),
-        Text(label,
-          style: GoogleFonts.inter(
-            fontSize: 11, fontWeight: FontWeight.w700,
-            color: accent ? AppColors.accent : Colors.white.withValues(alpha: 0.85))),
-      ]),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final Color fg = danger
+        ? Colors.red.shade300
+        : accent
+            ? AppColors.accent
+            : Colors.white.withValues(alpha: 0.85);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: danger
+              ? Colors.red.withValues(alpha: 0.15)
+              : accent
+                  ? AppColors.accent.withValues(alpha: 0.25)
+                  : Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: danger
+                ? Colors.red.withValues(alpha: 0.4)
+                : accent
+                    ? AppColors.accent.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.2))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: fg),
+          const SizedBox(width: 5),
+          Text(label,
+            style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Collect Payment Sheet ─────────────────────────────────────────────────────
@@ -1824,4 +2011,109 @@ class _CollectPaymentSheetState extends State<_CollectPaymentSheet> {
       ),
     );
   }
+}
+
+// ── Export Format Sheet ───────────────────────────────────────────────────────
+class _ExportSheet extends StatelessWidget {
+  final String title;
+  final void Function(String format) onExport;
+  const _ExportSheet({required this.title, required this.onExport});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+    decoration: BoxDecoration(
+      color: AppColors.surface, borderRadius: BorderRadius.circular(24)),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Center(
+        child: Container(
+          margin: const EdgeInsets.only(top: 12, bottom: 4),
+          width: 36, height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.border, borderRadius: BorderRadius.circular(2)))),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.download_rounded, size: 18, color: AppColors.accent)),
+          const SizedBox(width: 10),
+          Text(title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15, fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary)),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Text('Choose export format. CSV opens in Excel/Sheets. HTML can be saved as PDF from your browser.',
+          style: GoogleFonts.inter(
+            fontSize: 12, color: AppColors.textMuted))),
+      const SizedBox(height: 14),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(children: [
+          Expanded(child: _ExportFormatTile(
+            icon: Icons.table_chart_rounded,
+            label: 'CSV / Excel',
+            subtitle: 'Opens in Excel or Sheets',
+            color: const Color(0xFF16A34A),
+            onTap: () => onExport('csv'),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: _ExportFormatTile(
+            icon: Icons.picture_as_pdf_rounded,
+            label: 'HTML / PDF',
+            subtitle: 'Open in browser → Print',
+            color: const Color(0xFFDC2626),
+            onTap: () => onExport('html'),
+          )),
+        ]),
+      ),
+      const SizedBox(height: 20),
+    ]),
+  );
+}
+
+class _ExportFormatTile extends StatelessWidget {
+  final IconData icon;
+  final String label, subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  const _ExportFormatTile({
+    required this.icon, required this.label, required this.subtitle,
+    required this.color, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: color)),
+        const SizedBox(height: 10),
+        Text(label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13, fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary)),
+        const SizedBox(height: 2),
+        Text(subtitle,
+          style: GoogleFonts.inter(
+            fontSize: 10, color: AppColors.textMuted)),
+      ]),
+    ),
+  );
 }

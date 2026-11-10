@@ -3,6 +3,50 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
+import '../utils/responsive.dart';
+
+// ── Tablet-aware bottom sheet wrapper ────────────────────────────────────────
+// Centers and constrains sheets to sheetMaxWidth on tablets.
+class AppSheet extends StatelessWidget {
+  final Widget child;
+  final double? maxWidth;
+
+  const AppSheet({super.key, required this.child, this.maxWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    final mw = maxWidth ?? resp.sheetMaxWidth;
+    if (!resp.isTablet || mw == double.infinity) return child;
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: mw),
+        child: child,
+      ),
+    );
+  }
+}
+
+// ── Tablet-aware dialog wrapper ───────────────────────────────────────────────
+// Use in showDialog builder to center and constrain dialog content on tablets.
+class AppDialogSheet extends StatelessWidget {
+  final Widget child;
+
+  const AppDialogSheet({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    if (!resp.isTablet) return child;
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: resp.dialogMaxWidth),
+        child: child,
+      ),
+    );
+  }
+}
 
 // ── Section header ────────────────────────────────────────────────────────────
 class SectionHeader extends StatelessWidget {
@@ -12,23 +56,30 @@ class SectionHeader extends StatelessWidget {
   const SectionHeader({super.key, required this.title, this.action, this.onAction});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: AppTextStyles.headingMedium),
-        if (action != null)
-          GestureDetector(
-            onTap: onAction,
-            child: Text(action!,
-              style: GoogleFonts.inter(
-                fontSize: 12, fontWeight: FontWeight.w700,
-                color: AppColors.primaryLight)),
-          ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    final hPad = resp.hPad;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(hPad, resp.isTablet ? 28 : 24, hPad, 14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title,
+            style: AppTextStyles.headingMedium.copyWith(
+              fontSize: resp.isLargeTablet ? 20 : (resp.isMidTablet ? 18 : 16))),
+          if (action != null)
+            GestureDetector(
+              onTap: onAction,
+              child: Text(action!,
+                style: GoogleFonts.inter(
+                  fontSize: resp.isTablet ? 14 : 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryLight)),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Animated stat card ────────────────────────────────────────────────────────
@@ -56,15 +107,30 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    final pad = resp.isTablet ? 22.0 : 18.0;
+    final iconSz = resp.isTablet ? 50.0 : 42.0;
+    final iconRadius = resp.isTablet ? 15.0 : 13.0;
+    final valFontSz = resp.isLargeTablet ? 24.0 : (resp.isMidTablet ? 22.0 : 19.0);
+    final lblFontSz = resp.isTablet ? 13.0 : 12.0;
+    final borderColor = resp.isTablet
+        ? const Color(0xFFCBD5E1)   // stronger, visible on white for tablet
+        : AppColors.border;
+
     return PressScale(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(pad),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border),
-          boxShadow: AppShadows.sm,
+          borderRadius: BorderRadius.circular(resp.isTablet ? 22 : 20),
+          border: Border.all(color: borderColor, width: resp.isTablet ? 1.5 : 1.0),
+          boxShadow: resp.isTablet ? [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 16, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4, offset: const Offset(0, 1)),
+          ] : AppShadows.sm,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,43 +139,47 @@ class StatCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  width: 42, height: 42,
+                  width: iconSz, height: iconSz,
                   decoration: BoxDecoration(
-                    color: bgColor, borderRadius: BorderRadius.circular(13)),
-                  child: Icon(icon, color: color, size: 20),
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(iconRadius)),
+                  child: Icon(icon, color: color,
+                    size: resp.isTablet ? 24 : 20),
                 ),
                 if (trend != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: resp.isTablet ? 9 : 7,
+                      vertical: resp.isTablet ? 4 : 3),
                     decoration: BoxDecoration(
-                      color: trendUp
-                          ? AppColors.successBg : AppColors.dangerBg,
+                      color: trendUp ? AppColors.successBg : AppColors.dangerBg,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(
                         trendUp ? Icons.trending_up_rounded
                             : Icons.trending_down_rounded,
-                        size: 11,
+                        size: resp.isTablet ? 13 : 11,
                         color: trendUp ? AppColors.success : AppColors.danger),
                       const SizedBox(width: 3),
                       Text(trend!,
                         style: GoogleFonts.inter(
-                          fontSize: 10, fontWeight: FontWeight.w800,
+                          fontSize: resp.isTablet ? 11 : 10,
+                          fontWeight: FontWeight.w800,
                           color: trendUp ? AppColors.successDark : AppColors.danger)),
                     ]),
                   ),
               ],
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: resp.isTablet ? 16 : 14),
             Text(value,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 19, fontWeight: FontWeight.w900,
+                fontSize: valFontSz, fontWeight: FontWeight.w900,
                 color: AppColors.textPrimary, letterSpacing: -0.5, height: 1.1)),
             const SizedBox(height: 4),
             Text(label,
               style: GoogleFonts.inter(
-                fontSize: 12, fontWeight: FontWeight.w600,
+                fontSize: lblFontSz, fontWeight: FontWeight.w600,
                 color: AppColors.textMuted)),
           ],
         ),
@@ -137,18 +207,20 @@ class HeroStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
     return PressScale(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(resp.isTablet ? 24 : 20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: gradient.first.withValues(alpha: 0.3),
-              blurRadius: 16, offset: const Offset(0, 6)),
+              color: gradient.first.withValues(alpha: resp.isTablet ? 0.35 : 0.3),
+              blurRadius: resp.isTablet ? 24 : 16,
+              offset: Offset(0, resp.isTablet ? 8 : 6)),
           ],
         ),
         child: Column(
@@ -158,27 +230,28 @@ class HeroStatCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  width: 40, height: 40,
+                  width: resp.isTablet ? 48 : 40,
+                  height: resp.isTablet ? 48 : 40,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12)),
-                  child: Icon(icon, color: Colors.white, size: 20),
+                  child: Icon(icon, color: Colors.white, size: resp.isTablet ? 24 : 20),
                 ),
                 Icon(Icons.arrow_forward_ios_rounded,
                   color: Colors.white.withValues(alpha: 0.4), size: 14),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: resp.isTablet ? 20 : 16),
             DefaultTextStyle(
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 22, fontWeight: FontWeight.w900,
+                fontSize: resp.isTablet ? 26 : 22, fontWeight: FontWeight.w900,
                 color: Colors.white, letterSpacing: -0.8),
               child: valueWidget,
             ),
             const SizedBox(height: 4),
             Text(label,
               style: GoogleFonts.inter(
-                fontSize: 12, fontWeight: FontWeight.w600,
+                fontSize: resp.isTablet ? 13 : 12, fontWeight: FontWeight.w600,
                 color: Colors.white.withValues(alpha: 0.65))),
           ],
         ),

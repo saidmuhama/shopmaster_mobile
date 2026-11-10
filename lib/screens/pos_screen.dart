@@ -218,8 +218,8 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final resp = Responsive.of(context);
-    // On large tablets: split-pane — products left, inline cart right
-    if (resp.isLargeTablet) {
+    // All tablets (600+): split-pane — products left, inline cart right
+    if (resp.isTablet) {
       return Scaffold(
         backgroundColor: AppColors.bg,
         body: Row(children: [
@@ -231,9 +231,9 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
               Expanded(child: _buildProductGrid()),
             ]),
           ),
-          // Inline cart panel
+          // Inline cart panel — narrower on mid tablets
           Container(
-            width: 340,
+            width: resp.cartPanelWidth,
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border(left: BorderSide(
@@ -473,10 +473,31 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
 
   Widget _buildProductGrid() {
     final resp = Responsive.of(context);
-    final cols = resp.posColumns;
     final spacing = resp.cardSpacing;
-    final pad = resp.hPad - 4;
-    final aspectRatio = resp.posCardRatio;
+    final pad = resp.isTablet ? 12.0 : (resp.hPad - 4);
+    return LayoutBuilder(builder: (context, constraints) {
+      final avail = constraints.maxWidth;
+      // Compute columns from ACTUAL available width (not full screen width),
+      // so split-pane layout doesn't produce cards that are too narrow.
+      final int cols;
+      if (avail >= 700) {
+        cols = 4;
+      } else if (avail >= 480) {
+        cols = 3;
+      } else if (avail >= 320) {
+        cols = 2;
+      } else {
+        cols = 2;
+      }
+      final cellH = resp.isTablet ? 182.0 : 232.0;
+      return _buildProductGridInner(cols: cols, spacing: spacing, pad: pad, cellH: cellH);
+    });
+  }
+
+  Widget _buildProductGridInner({
+    required int cols, required double spacing,
+    required double pad, required double cellH}) {
+    final resp = Responsive.of(context);
 
     if (_loading) {
       return RefreshIndicator(
@@ -485,7 +506,7 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
         child: GridView.builder(
           padding: EdgeInsets.all(pad),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: cols, childAspectRatio: aspectRatio,
+            crossAxisCount: cols, mainAxisExtent: cellH,
             crossAxisSpacing: spacing, mainAxisSpacing: spacing),
           itemCount: cols * 2,
           itemBuilder: (_, __) => Container(
@@ -537,7 +558,7 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
         padding: EdgeInsets.fromLTRB(pad, pad, pad,
           _cart.isNotEmpty ? (resp.isTablet ? 20 : 90) : 20),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: cols, childAspectRatio: aspectRatio,
+          crossAxisCount: cols, mainAxisExtent: cellH,
           crossAxisSpacing: spacing, mainAxisSpacing: spacing),
         itemCount: prods.length,
         itemBuilder: (_, i) => _ProductCard(
@@ -1988,7 +2009,7 @@ class _CartItemRow extends StatelessWidget {
     final col = _avatarColor(item.product.name);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -2042,21 +2063,24 @@ class _CartItemRow extends StatelessWidget {
 
               // Price badge (compact: icon + price only) + label outside badge
               return Row(children: [
-                GestureDetector(
-                  onTap: onPriceEdit,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: badgeBg,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: badgeColor.withValues(alpha: 0.4))),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.edit_rounded, size: 10, color: badgeColor),
-                      const SizedBox(width: 4),
-                      Text('$currency ${_fmtNum(item.price)}',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11, fontWeight: FontWeight.w800, color: badgeColor)),
-                    ]),
+                Flexible(
+                  child: GestureDetector(
+                    onTap: onPriceEdit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: badgeColor.withValues(alpha: 0.4))),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.edit_rounded, size: 10, color: badgeColor),
+                        const SizedBox(width: 4),
+                        Flexible(child: Text('$currency ${_fmtNum(item.price)}',
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11, fontWeight: FontWeight.w800, color: badgeColor))),
+                      ]),
+                    ),
                   ),
                 ),
                 if (label != null) ...[
@@ -2093,23 +2117,29 @@ class _CartItemRow extends StatelessWidget {
           _qtyBtn(Icons.add_rounded, onInc, false),
         ]),
         const SizedBox(width: 6),
-        // Total + delete
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(_fmtNum(item.total),
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13, fontWeight: FontWeight.w900,
-              color: AppColors.primary, letterSpacing: -0.3)),
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              width: 26, height: 26,
-              decoration: BoxDecoration(
-                color: AppColors.dangerBg,
-                borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.delete_outline_rounded,
-                size: 13, color: AppColors.danger))),
-        ]),
+        // Total + delete — fixed width so text never pushes Row past bounds
+        SizedBox(
+          width: 64,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(_fmtNum(item.total),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13, fontWeight: FontWeight.w900,
+                  color: AppColors.primary, letterSpacing: -0.3))),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                width: 26, height: 26,
+                decoration: BoxDecoration(
+                  color: AppColors.dangerBg,
+                  borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.delete_outline_rounded,
+                  size: 13, color: AppColors.danger))),
+          ]),
+        ),
       ]),
     );
   }

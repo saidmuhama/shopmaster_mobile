@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
+import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
 
 class BranchesScreen extends StatefulWidget {
@@ -223,18 +224,43 @@ class _BranchesScreenState extends State<BranchesScreen>
                   : RefreshIndicator(
                       onRefresh: _load,
                       color: AppColors.primary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                        itemCount: _branches.length,
-                        itemBuilder: (_, i) => StaggeredItem(
-                          index: i, controller: _listCtrl,
-                          child: _BranchCard(
-                            branch: _branches[i],
-                            onEdit:   () => _openEdit(_branches[i]),
-                            onToggle: () => _toggleBranch(_branches[i]),
-                            onDelete: () => _deleteBranch(_branches[i]),
-                          )),
-                      )),
+                      child: Builder(builder: (ctx) {
+                        final resp = Responsive.of(ctx);
+                        if (resp.isTablet) {
+                          final cols = resp.isLargeTablet ? 3 : 2;
+                          return GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: cols,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              mainAxisExtent: 215,
+                            ),
+                            itemCount: _branches.length,
+                            itemBuilder: (_, i) => StaggeredItem(
+                              index: i, controller: _listCtrl,
+                              child: _BranchCard(
+                                branch: _branches[i],
+                                isTablet: true,
+                                onEdit:   () => _openEdit(_branches[i]),
+                                onToggle: () => _toggleBranch(_branches[i]),
+                                onDelete: () => _deleteBranch(_branches[i]),
+                              )),
+                          );
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                          itemCount: _branches.length,
+                          itemBuilder: (_, i) => StaggeredItem(
+                            index: i, controller: _listCtrl,
+                            child: _BranchCard(
+                              branch: _branches[i],
+                              onEdit:   () => _openEdit(_branches[i]),
+                              onToggle: () => _toggleBranch(_branches[i]),
+                              onDelete: () => _deleteBranch(_branches[i]),
+                            )),
+                        );
+                      })),
         ),
       ]),
     );
@@ -244,15 +270,157 @@ class _BranchesScreenState extends State<BranchesScreen>
 // ── Branch card ───────────────────────────────────────────────────────────────
 class _BranchCard extends StatelessWidget {
   final Map<String, dynamic> branch;
+  final bool isTablet;
   final VoidCallback onEdit, onToggle, onDelete;
 
   const _BranchCard({
     required this.branch,
+    this.isTablet = false,
     required this.onEdit, required this.onToggle, required this.onDelete,
   });
 
+  Widget _buildTabletCard() {
+    final isActive  = branch['is_active'].toString() == '1';
+    final isMain    = branch['is_main'].toString() == '1';
+    final name      = branch['name'] as String? ?? '';
+    final code      = branch['code'] as String? ?? '';
+    final city      = branch['city'] as String? ?? '';
+    final address   = branch['address'] as String? ?? '';
+    final userCount = int.tryParse(branch['user_count']?.toString() ?? '0') ?? 0;
+
+    final headerColors = isMain
+        ? [const Color(0xFFB45309), AppColors.accentDark]
+        : [const Color(0xFF0C2518), AppColors.primary];
+    final iconColor = isMain ? AppColors.accent : Colors.white;
+
+    return Container(
+      height: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isActive
+              ? (isMain
+                  ? AppColors.accent.withValues(alpha: 0.3)
+                  : AppColors.border)
+              : AppColors.danger.withValues(alpha: 0.2)),
+        boxShadow: [BoxShadow(
+          color: (isMain ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
+          blurRadius: 16, offset: const Offset(0, 4))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // ── Gradient header with icon ──────────────────────────────────
+        Container(
+          height: 68,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: headerColors,
+              begin: Alignment.topLeft, end: Alignment.bottomRight)),
+          child: Stack(children: [
+            Positioned.fill(child: Center(
+              child: Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.4), width: 1.5)),
+                child: Icon(
+                  isMain ? Icons.store_rounded : Icons.storefront_outlined,
+                  color: iconColor, size: 22)))),
+            if (isMain)
+              Positioned(top: 7, right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+                  child: Text('Main',
+                    style: GoogleFonts.inter(
+                      fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)))),
+            if (!isActive)
+              Positioned(top: 7, left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger, borderRadius: BorderRadius.circular(20)),
+                  child: Text('Inactive',
+                    style: GoogleFonts.inter(
+                      fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)))),
+          ])),
+        // ── Body ──────────────────────────────────────────────────────
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Branch info
+                Column(children: [
+                  Text(name,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13.5, fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary, letterSpacing: -0.2),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center),
+                  const SizedBox(height: 5),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    if (code.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6)),
+                        child: Text(code,
+                          style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w800,
+                            color: AppColors.primary))),
+                      const SizedBox(width: 6),
+                    ],
+                    Icon(Icons.people_outline_rounded,
+                      size: 11, color: AppColors.textMuted),
+                    const SizedBox(width: 3),
+                    Text('$userCount ${userCount == 1 ? 'user' : 'users'}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10, color: AppColors.textMuted,
+                        fontWeight: FontWeight.w600)),
+                  ]),
+                  if (address.isNotEmpty || city.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      [if (address.isNotEmpty) address,
+                       if (city.isNotEmpty) city].join(', '),
+                      style: GoogleFonts.inter(
+                        fontSize: 10, color: AppColors.textMuted,
+                        fontWeight: FontWeight.w500),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center),
+                  ],
+                ]),
+                // Action buttons
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  _BranchIconBtn(icon: Icons.edit_rounded,
+                    color: AppColors.primary, onTap: onEdit),
+                  if (!isMain) ...[
+                    _BranchIconBtn(
+                      icon: isActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: isActive ? AppColors.warning : AppColors.success,
+                      onTap: onToggle),
+                    _BranchIconBtn(icon: Icons.delete_outline_rounded,
+                      color: AppColors.danger, onTap: onDelete),
+                  ],
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isTablet) return _buildTabletCard();
     final isActive  = branch['is_active'].toString() == '1';
     final isMain    = branch['is_main'].toString() == '1';
     final name      = branch['name'] as String? ?? '';

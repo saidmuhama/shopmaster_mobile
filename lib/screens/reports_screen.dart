@@ -9,6 +9,7 @@ import '../utils/animations.dart';
 import '../utils/formatter.dart';
 import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
+import 'product_profit_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   final AuthUser user;
@@ -197,6 +198,14 @@ class _ReportsScreenState extends State<ReportsScreen>
           expenses: stats.monthExpenses,
           currency: cur, fmt: fmt),
       ),
+
+      const SizedBox(height: 16),
+
+      // ── Profit by Product shortcut ────────────────────────────────────────
+      StaggeredItem(
+        index: 4, controller: _listCtrl,
+        child: _ProfitByProductCard(user: widget.user),
+      ),
     ]);
   }
 
@@ -219,6 +228,47 @@ class _ReportsScreenState extends State<ReportsScreen>
       const SizedBox(height: 16),
       ShimmerBox(width: double.infinity, height: 180, radius: 20),
     ]),
+  );
+}
+
+// ── Profit by Product card ────────────────────────────────────────────────────
+class _ProfitByProductCard extends StatelessWidget {
+  final AuthUser user;
+  const _ProfitByProductCard({required this.user});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: () => Navigator.push(context,
+        MaterialPageRoute(builder: (_) => ProductProfitScreen(user: user))),
+    child: Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary, const Color(0xFF2d6a4f)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(.25),
+            blurRadius: 14, offset: const Offset(0, 6))],
+      ),
+      child: Row(children: [
+        Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(
+              color: Colors.white.withOpacity(.15),
+              borderRadius: BorderRadius.circular(14)),
+          child: const Icon(Icons.pie_chart_rounded, color: Colors.white, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Profit by Product', style: GoogleFonts.inter(
+              fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+          const SizedBox(height: 3),
+          Text('See which products make the most profit',
+              style: GoogleFonts.inter(fontSize: 11,
+                  color: Colors.white.withOpacity(.7))),
+        ])),
+        const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white60, size: 16),
+      ]),
+    ),
   );
 }
 

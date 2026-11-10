@@ -187,7 +187,7 @@ class _TabletNavRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final railWidth = extended ? 200.0 : 76.0;
+    final railWidth = extended ? 220.0 : 80.0;
     return Container(
       width: railWidth,
       decoration: const BoxDecoration(
@@ -207,28 +207,28 @@ class _TabletNavRail extends StatelessWidget {
             child: extended
                 ? Row(children: [
                     Container(
-                      width: 38, height: 38,
+                      width: 42, height: 42,
                       decoration: BoxDecoration(
                         color: AppColors.accent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: AppColors.accent.withValues(alpha: 0.3))),
                       child: const Icon(Icons.store_rounded,
-                        color: AppColors.accent, size: 20)),
+                        color: AppColors.accent, size: 22)),
                     const SizedBox(width: 10),
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('MDSPro',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13, fontWeight: FontWeight.w900,
+                            fontSize: 17, fontWeight: FontWeight.w900,
                             color: Colors.white, letterSpacing: -0.3)),
                         Text(user.shopName,
                           maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.white.withValues(alpha: 0.45),
-                            fontWeight: FontWeight.w500)),
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w600)),
                       ],
                     )),
                   ])
@@ -263,7 +263,7 @@ class _TabletNavRail extends StatelessWidget {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: EdgeInsets.symmetric(
-                        horizontal: extended ? 12 : 10, vertical: 10),
+                        horizontal: extended ? 14 : 10, vertical: 12),
                       decoration: BoxDecoration(
                         color: sel
                             ? activeColor.withValues(alpha: 0.15)
@@ -279,19 +279,19 @@ class _TabletNavRail extends StatelessWidget {
                           ? Row(children: [
                               Icon(
                                 sel ? items[i].activeIcon : items[i].icon,
-                                size: 20,
+                                size: 22,
                                 color: sel
                                     ? activeColor
                                     : Colors.white.withValues(alpha: 0.5)),
                               const SizedBox(width: 12),
                               Text(items[i].label,
                                 style: GoogleFonts.inter(
-                                  fontSize: 13,
+                                  fontSize: 15,
                                   fontWeight: sel
-                                      ? FontWeight.w700 : FontWeight.w500,
+                                      ? FontWeight.w800 : FontWeight.w500,
                                   color: sel
                                       ? activeColor
-                                      : Colors.white.withValues(alpha: 0.5))),
+                                      : Colors.white.withValues(alpha: 0.6))),
                             ])
                           : Column(
                               mainAxisSize: MainAxisSize.min,
@@ -305,7 +305,7 @@ class _TabletNavRail extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text(items[i].label,
                                   style: GoogleFonts.inter(
-                                    fontSize: 9,
+                                    fontSize: 11,
                                     fontWeight: sel
                                         ? FontWeight.w700 : FontWeight.w500,
                                     color: sel
@@ -343,12 +343,12 @@ class _TabletNavRail extends StatelessWidget {
                         Text(user.name,
                           maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 11, fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.85))),
+                            fontSize: 14, fontWeight: FontWeight.w700,
+                            color: Colors.white.withValues(alpha: 0.9))),
                         Text(user.role,
                           style: GoogleFonts.inter(
-                            fontSize: 9,
-                            color: Colors.white.withValues(alpha: 0.4),
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.55),
                             fontWeight: FontWeight.w500)),
                       ],
                     )),

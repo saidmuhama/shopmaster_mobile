@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatter.dart';
+import '../utils/responsive.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class ReceiptScreen extends StatefulWidget {
@@ -281,6 +282,13 @@ class _ReceiptScreenState extends State<ReceiptScreen>
   // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    final isTablet = resp.isTablet;
+
+    if (isTablet) {
+      return _buildTabletLayout(context, resp);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
       body: Stack(children: [
@@ -291,7 +299,7 @@ class _ReceiptScreenState extends State<ReceiptScreen>
                 colors: [Color(0xFF061410), Color(0xFF0F2D1A)],
                 begin: Alignment.topLeft, end: Alignment.bottomRight)))),
         SafeArea(child: Column(children: [
-          _buildTopBar(),
+          _buildTopBar(isTablet: false),
           Expanded(
             child: FadeTransition(
               opacity: _fadeAnim,
@@ -300,10 +308,8 @@ class _ReceiptScreenState extends State<ReceiptScreen>
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                   child: Column(children: [
-                    _buildSuccessBadge(),
+                    _buildSuccessBadge(isTablet: false),
                     const SizedBox(height: 14),
-
-                    // The receipt paper
                     Screenshot(
                       controller: _screenshotCtrl,
                       child: _ThermalReceiptPaper(
@@ -315,11 +321,10 @@ class _ReceiptScreenState extends State<ReceiptScreen>
                         qrData: _qrData, forPrint: false,
                       ),
                     ),
-
                     const SizedBox(height: 20),
-                    _buildActionRow(),
+                    _buildActionRow(isTablet: false),
                     const SizedBox(height: 12),
-                    _buildNewSaleBtn(),
+                    _buildNewSaleBtn(isTablet: false),
                   ]),
                 ),
               ),
@@ -330,7 +335,175 @@ class _ReceiptScreenState extends State<ReceiptScreen>
     );
   }
 
-  Widget _buildTopBar() => Padding(
+  // ── Tablet layout: dark sidebar + centered receipt card ──────────────────
+  Widget _buildTabletLayout(BuildContext context, Responsive resp) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A1F12),
+      body: Row(children: [
+        // Left sidebar — actions + branding
+        Container(
+          width: 280,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF061410), Color(0xFF0F2D1A)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight)),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Back
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
+                      child: const Icon(Icons.arrow_back_rounded,
+                        color: Colors.white, size: 20))),
+                  const SizedBox(height: 32),
+
+                  // Success badge
+                  _buildSuccessBadge(isTablet: true),
+                  const SizedBox(height: 20),
+
+                  // Sale confirmed title
+                  Text('Sale Confirmed!',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 22, fontWeight: FontWeight.w900,
+                      color: Colors.white, height: 1.2)),
+                  const SizedBox(height: 6),
+                  Text('Invoice · $_invoiceNo',
+                    style: GoogleFonts.ibmPlexMono(
+                      fontSize: 11, color: Colors.white.withValues(alpha: 0.45))),
+                  const SizedBox(height: 4),
+                  Text(_now(),
+                    style: GoogleFonts.ibmPlexMono(
+                      fontSize: 11, color: Colors.white.withValues(alpha: 0.35))),
+
+                  const SizedBox(height: 28),
+
+                  // Total highlight
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
+                    child: Row(children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.payments_rounded,
+                          size: 20, color: Color(0xFF34D399))),
+                      const SizedBox(width: 12),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Total Collected',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, color: Colors.white.withValues(alpha: 0.5))),
+                        const SizedBox(height: 2),
+                        Text('$_currency ${_fmtN(_total)}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18, fontWeight: FontWeight.w900,
+                            color: const Color(0xFF4ADE80), letterSpacing: -0.5)),
+                      ]),
+                    ]),
+                  ),
+
+                  const Spacer(),
+
+                  // Action buttons — vertical on sidebar
+                  _SidebarBtn(
+                    label: _saving ? 'Saving…' : 'Save Receipt',
+                    icon: Icons.download_rounded,
+                    loading: _saving,
+                    color: AppColors.primary,
+                    onTap: _saving ? null : _saveReceipt),
+                  const SizedBox(height: 10),
+                  _SidebarBtn(
+                    label: _sharing ? 'Sharing…' : 'Share Receipt',
+                    icon: Icons.share_rounded,
+                    loading: _sharing,
+                    color: AppColors.accent,
+                    onTap: _sharing ? null : _shareReceipt),
+                  const SizedBox(height: 10),
+                  _SidebarBtn(
+                    label: _printing ? 'Printing…' : 'Print Receipt',
+                    icon: Icons.print_rounded,
+                    loading: _printing,
+                    color: const Color(0xFF2563EB),
+                    onTap: _printing ? null : _printReceipt),
+                  const SizedBox(height: 16),
+
+                  // New Sale
+                  GestureDetector(
+                    onTap: () { HapticFeedback.lightImpact(); Navigator.popUntil(context, (r) => r.isFirst); },
+                    child: Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
+                      child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.add_shopping_cart_rounded,
+                          color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text('New Sale',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14, fontWeight: FontWeight.w800,
+                            color: Colors.white)),
+                      ])))),
+                ]),
+              ),
+            ),
+          ),
+        ),
+
+        // Right — receipt paper centered
+        Expanded(
+          child: Container(
+            color: const Color(0xFFF0F4F8),
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: SlideTransition(
+                  position: _slideAnim,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 480),
+                          child: Screenshot(
+                            controller: _screenshotCtrl,
+                            child: _ThermalReceiptPaper(
+                              shopName: _shopName, tin: _tin, invoiceNo: _invoiceNo,
+                              dateStr: _now(), custName: _custName, custPhone: _custPhone,
+                              cashier: _cashier, items: _items, subtotal: _subtotal,
+                              discount: _discount, total: _total, paidAmount: _paidAmount,
+                              change: _change, payMethod: _payMethod, currency: _currency,
+                              qrData: _qrData, forPrint: false, isTablet: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildTopBar({required bool isTablet}) => Padding(
     padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
     child: Row(children: [
       GestureDetector(
@@ -348,21 +521,22 @@ class _ReceiptScreenState extends State<ReceiptScreen>
     ]),
   );
 
-  Widget _buildSuccessBadge() => AnimatedBuilder(
+  Widget _buildSuccessBadge({required bool isTablet}) => AnimatedBuilder(
     animation: _checkCtrl,
     builder: (_, __) => Transform.scale(
       scale: Curves.elasticOut.transform(_checkCtrl.value.clamp(0.0, 1.0)),
       child: Container(
-        width: 64, height: 64,
+        width: isTablet ? 72 : 64, height: isTablet ? 72 : 64,
         decoration: BoxDecoration(
           color: AppColors.success, shape: BoxShape.circle,
           boxShadow: [BoxShadow(
             color: AppColors.success.withValues(alpha: 0.4),
-            blurRadius: 20, spreadRadius: 3)]),
-        child: const Icon(Icons.check_rounded, color: Colors.white, size: 34))),
+            blurRadius: isTablet ? 28 : 20, spreadRadius: 3)]),
+        child: Icon(Icons.check_rounded,
+          color: Colors.white, size: isTablet ? 38 : 34))),
   );
 
-  Widget _buildActionRow() => Row(children: [
+  Widget _buildActionRow({required bool isTablet}) => Row(children: [
     _Btn(label: _saving  ? 'Saving…'  : 'Save',
          icon: Icons.download_rounded, loading: _saving,
          color: AppColors.primary, onTap: _saving  ? null : _saveReceipt),
@@ -376,7 +550,7 @@ class _ReceiptScreenState extends State<ReceiptScreen>
          color: const Color(0xFF2563EB), onTap: _printing ? null : _printReceipt),
   ]);
 
-  Widget _buildNewSaleBtn() => GestureDetector(
+  Widget _buildNewSaleBtn({required bool isTablet}) => GestureDetector(
     onTap: () { HapticFeedback.lightImpact(); Navigator.popUntil(context, (r) => r.isFirst); },
     child: Container(
       height: 50,
@@ -416,6 +590,7 @@ class _ThermalReceiptPaper extends StatelessWidget {
   final String  currency;
   final String  qrData;
   final bool    forPrint;
+  final bool    isTablet;
 
   const _ThermalReceiptPaper({
     required this.shopName,
@@ -435,6 +610,7 @@ class _ThermalReceiptPaper extends StatelessWidget {
     required this.currency,
     required this.qrData,
     required this.forPrint,
+    this.isTablet = false,
   });
 
   String _payLabel(String m) => const {
@@ -444,32 +620,36 @@ class _ThermalReceiptPaper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fs = isTablet ? 1.25 : 1.0; // font scale factor for tablet
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(isTablet ? 12 : 4),
         boxShadow: forPrint ? [] : [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.10),
-              blurRadius: 20, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.black.withValues(alpha: isTablet ? 0.12 : 0.10),
+              blurRadius: isTablet ? 32 : 20,
+              offset: const Offset(0, 4))
         ],
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 0.8),
+        border: Border.all(
+          color: isTablet ? const Color(0xFFCBD5E1) : const Color(0xFFE5E7EB),
+          width: isTablet ? 1.5 : 0.8),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // ── Header: shop name + TIN ─────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+          padding: EdgeInsets.fromLTRB(16, isTablet ? 24 : 18, 16, isTablet ? 16 : 12),
           child: Column(children: [
             Text(shopName.toUpperCase(),
               textAlign: TextAlign.center,
               style: GoogleFonts.ibmPlexMono(
-                fontSize: 15, fontWeight: FontWeight.w700,
+                fontSize: 15 * fs, fontWeight: FontWeight.w700,
                 color: Colors.black, letterSpacing: 0.5)),
             if (tin != null && tin!.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text('TIN: $tin',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.ibmPlexMono(
-                  fontSize: 11, color: const Color(0xFF444444))),
+                  fontSize: 11 * fs, color: const Color(0xFF444444))),
             ],
           ]),
         ),
@@ -478,13 +658,13 @@ class _ThermalReceiptPaper extends StatelessWidget {
 
         // ── Meta info ──────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          padding: EdgeInsets.fromLTRB(14, isTablet ? 14 : 10, 14, isTablet ? 14 : 10),
           child: Column(children: [
-            _MetaRow('Invoice No.', invoiceNo),
-            _MetaRow('Date', dateStr),
-            _MetaRow('Customer', custName),
-            _MetaRow('Phone', 'Mobile: $custPhone'),
-            _MetaRow('Created by:', cashier),
+            _MetaRow('Invoice No.', invoiceNo, fs: fs),
+            _MetaRow('Date', dateStr, fs: fs),
+            _MetaRow('Customer', custName, fs: fs),
+            _MetaRow('Phone', 'Mobile: $custPhone', fs: fs),
+            _MetaRow('Created by:', cashier, fs: fs),
           ]),
         ),
 
@@ -529,29 +709,37 @@ class _ThermalReceiptPaper extends StatelessWidget {
 
         // ── Bottom: QR + Totals ─────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: EdgeInsets.fromLTRB(14, isTablet ? 16 : 12, 14, isTablet ? 16 : 12),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             // QR code
             QrImageView(
               data: qrData,
               version: QrVersions.auto,
-              size: 90,
+              size: isTablet ? 110 : 90,
               backgroundColor: Colors.white,
-              errorStateBuilder: (_, __) => const SizedBox(width: 90, height: 90),
+              errorStateBuilder: (_, __) => SizedBox(
+                width: isTablet ? 110 : 90,
+                height: isTablet ? 110 : 90),
             ),
             const SizedBox(width: 12),
             // Totals
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 if (discount > 0) ...[
-                  _TotalRow('Subtotal:', '$currency ${_fmtN(subtotal)}', bold: false),
-                  _TotalRow('Discount:', '-$currency ${_fmtN(discount)}', bold: false, color: AppColors.danger),
+                  _TotalRow('Subtotal:', '$currency ${_fmtN(subtotal)}',
+                    bold: false, fs: fs),
+                  _TotalRow('Discount:', '-$currency ${_fmtN(discount)}',
+                    bold: false, color: AppColors.danger, fs: fs),
                 ],
-                _TotalRow('Total:', '$currency ${_fmtN(total)}', bold: true),
-                _TotalRow('${_payLabel(payMethod)}:', '$currency ${_fmtN(paidAmount)}', bold: false),
-                _TotalRow('Total Paid:', '$currency ${_fmtN(paidAmount)}', bold: false),
+                _TotalRow('Total:', '$currency ${_fmtN(total)}',
+                  bold: true, fs: fs),
+                _TotalRow('${_payLabel(payMethod)}:', '$currency ${_fmtN(paidAmount)}',
+                  bold: false, fs: fs),
+                _TotalRow('Total Paid:', '$currency ${_fmtN(paidAmount)}',
+                  bold: false, fs: fs),
                 if (change > 0)
-                  _TotalRow('Change:', '$currency ${_fmtN(change)}', bold: false),
+                  _TotalRow('Change:', '$currency ${_fmtN(change)}',
+                    bold: false, fs: fs),
               ]),
             ),
           ]),
@@ -561,11 +749,11 @@ class _ThermalReceiptPaper extends StatelessWidget {
 
         // ── Footer ─────────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: EdgeInsets.symmetric(vertical: isTablet ? 16 : 12),
           child: Text('System by: mdspro.co.tz',
             textAlign: TextAlign.center,
             style: GoogleFonts.ibmPlexMono(
-              fontSize: 10, color: const Color(0xFF666666))),
+              fontSize: 10 * fs, color: const Color(0xFF666666))),
         ),
       ]),
     );
@@ -622,7 +810,8 @@ class _DashPainter extends CustomPainter {
 
 class _MetaRow extends StatelessWidget {
   final String label, value;
-  const _MetaRow(this.label, this.value);
+  final double fs;
+  const _MetaRow(this.label, this.value, {this.fs = 1.0});
 
   @override
   Widget build(BuildContext context) {
@@ -630,15 +819,15 @@ class _MetaRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(
-          width: 100,
+          width: 100 * fs,
           child: Text(label,
             style: GoogleFonts.ibmPlexMono(
-              fontSize: 10.5, color: const Color(0xFF222222)))),
+              fontSize: 10.5 * fs, color: const Color(0xFF222222)))),
         Expanded(
           child: Text(value,
             textAlign: TextAlign.right,
             style: GoogleFonts.ibmPlexMono(
-              fontSize: 10.5, color: const Color(0xFF222222)))),
+              fontSize: 10.5 * fs, color: const Color(0xFF222222)))),
       ]),
     );
   }
@@ -719,7 +908,9 @@ class _TotalRow extends StatelessWidget {
   final String label, value;
   final bool bold;
   final Color? color;
-  const _TotalRow(this.label, this.value, {required this.bold, this.color});
+  final double fs;
+  const _TotalRow(this.label, this.value,
+    {required this.bold, this.color, this.fs = 1.0});
 
   @override
   Widget build(BuildContext context) {
@@ -727,15 +918,59 @@ class _TotalRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 1.5),
       child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
         Text(label, style: GoogleFonts.ibmPlexMono(
-          fontSize: 10.5,
+          fontSize: 10.5 * fs,
           fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
           color: color ?? const Color(0xFF222222))),
         const SizedBox(width: 6),
         Text(value, style: GoogleFonts.ibmPlexMono(
-          fontSize: bold ? 12 : 10.5,
+          fontSize: (bold ? 12.0 : 10.5) * fs,
           fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
           color: color ?? const Color(0xFF111111))),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tablet sidebar action button
+// ─────────────────────────────────────────────────────────────────────────────
+class _SidebarBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool loading;
+  final Color color;
+  final VoidCallback? onTap;
+  const _SidebarBtn({
+    required this.label, required this.icon, required this.loading,
+    required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 50,
+        decoration: BoxDecoration(
+          color: onTap == null
+              ? color.withValues(alpha: 0.3)
+              : color.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: onTap == null ? [] : [BoxShadow(
+            color: color.withValues(alpha: 0.3),
+            blurRadius: 10, offset: const Offset(0, 4))]),
+        child: Center(
+          child: loading
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(icon, color: Colors.white, size: 17),
+                  const SizedBox(width: 8),
+                  Text(label, style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
+                ]),
+        ),
+      ),
     );
   }
 }

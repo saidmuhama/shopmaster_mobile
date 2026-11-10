@@ -12,6 +12,7 @@ import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
 import 'home_screen.dart';
 import 'stock_adjustments_screen.dart';
+import 'product_profit_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final AuthUser user;
@@ -35,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<BranchStats> _branchStats = [];
   CashierStats? _cashierStats;
   int _pendingApprovals = 0;
+  StockValueSummary? _stockValues;
 
   @override
   void initState() {
@@ -92,6 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ApiService.getSales(filter: 'today', page: 1),
           ApiService.getAllBranchStats(),
           ApiService.getPendingAdjustments(),
+          ApiService.getStockValues(),
         ]);
         if (!mounted) return;
         final branches = results[2] as List<Branch>;
@@ -109,6 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           _recentSales       = (results[3] as List<Sale>).take(5).toList();
           _branchStats       = results[4] as List<BranchStats>;
           _pendingApprovals  = (results[5] as List<PendingAdjustment>).length;
+          _stockValues       = results[6] as StockValueSummary;
           _loading           = false;
         });
       }
@@ -136,6 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         currency: widget.user.currency,
         activeBranchId: _activeBranch?.id ?? 0,
         onNewSale: () => widget.onTabSwitch?.call(2),
+        user: widget.user,
       );
     }
 
@@ -199,7 +204,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final isCashier = widget.user.role == 'cashier';
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: const Color(0xFFF2F4F7),
       body: RefreshIndicator(
         color: AppColors.accent,
         backgroundColor: AppColors.primary,
@@ -248,8 +253,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: _KpiRow(stats: _stats!, currency: widget.user.currency)),
                 ),
 
-              // ── Large tablet: chart + recent side-by-side ─────────────
-              if (!isCashier && resp.isLargeTablet && _chart.isNotEmpty && _recentSales.isNotEmpty)
+              // ── Stock Value Card (not for cashier) ───────────────────
+              if (!isCashier && _stockValues != null)
+                SliverToBoxAdapter(
+                  child: StaggeredItem(index: 2, controller: _listCtrl,
+                    child: _StockValueCard(
+                      summary: _stockValues!,
+                      currency: widget.user.currency,
+                    )),
+                ),
+
+              // ── All tablets: chart + recent side-by-side ─────────────
+              if (!isCashier && resp.isTablet && _chart.isNotEmpty && _recentSales.isNotEmpty)
                 SliverToBoxAdapter(
                   child: StaggeredItem(index: 2, controller: _listCtrl,
                     child: Padding(
@@ -271,17 +286,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     )),
                 )
               else ...[
-                // ── Weekly chart (not shown for cashier, not large tablet side-by-side) ─
+                // ── Weekly chart (not shown for cashier, not tablet side-by-side) ─
                 if (!isCashier && _chart.isNotEmpty)
                   SliverToBoxAdapter(
-                    child: StaggeredItem(index: 2, controller: _listCtrl,
+                    child: StaggeredItem(index: 3, controller: _listCtrl,
                       child: _WeeklyChart(points: _chart, currency: widget.user.currency)),
                   ),
 
                 // ── Recent sales ──────────────────────────────────────────
                 if (_recentSales.isNotEmpty)
                   SliverToBoxAdapter(
-                    child: StaggeredItem(index: 3, controller: _listCtrl,
+                    child: StaggeredItem(index: 4, controller: _listCtrl,
                       child: _RecentSales(
                           sales: _recentSales,
                           currency: widget.user.currency,
@@ -292,7 +307,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
               // ── Quick actions ─────────────────────────────────────────
               SliverToBoxAdapter(
-                child: StaggeredItem(index: 4, controller: _listCtrl,
+                child: StaggeredItem(index: 5, controller: _listCtrl,
                   child: _QuickActions(
                     stats: _stats!,
                     currency: widget.user.currency,
@@ -334,15 +349,17 @@ class _Header extends StatelessWidget {
           duration: const Duration(seconds: 8))),
       SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 22),
+        child: Builder(builder: (ctx) {
+          final resp = Responsive.of(ctx);
+          return Padding(
+          padding: EdgeInsets.fromLTRB(resp.hPad, 16, resp.hPad, 22),
           child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Text('Good $greeting · ',
                     style: GoogleFonts.inter(
-                      fontSize: 12, fontWeight: FontWeight.w500,
+                      fontSize: resp.isTablet ? 14 : 12, fontWeight: FontWeight.w500,
                       color: Colors.white.withValues(alpha: 0.45))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -352,14 +369,14 @@ class _Header extends StatelessWidget {
                     child: Text(
                       DateFormat('EEE d MMM').format(DateTime.now()),
                       style: GoogleFonts.inter(
-                        fontSize: 10, fontWeight: FontWeight.w700,
+                        fontSize: resp.isTablet ? 12 : 10, fontWeight: FontWeight.w700,
                         color: AppColors.accent)),
                   ),
                 ]),
                 const SizedBox(height: 3),
                 Text(name,
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 24, fontWeight: FontWeight.w900,
+                    fontSize: resp.isTablet ? 30 : 24, fontWeight: FontWeight.w900,
                     color: Colors.white, letterSpacing: -0.8, height: 1.1)),
                 const SizedBox(height: 8),
                 Row(children: [
@@ -384,7 +401,8 @@ class _Header extends StatelessWidget {
               ]),
             ),
             Container(
-              width: 46, height: 46,
+              width: resp.isTablet ? 54 : 46,
+              height: resp.isTablet ? 54 : 46,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [AppColors.accent, AppColors.accentDark],
@@ -397,12 +415,13 @@ class _Header extends StatelessWidget {
               child: Center(
                 child: Text(name.substring(0, 1).toUpperCase(),
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 20, fontWeight: FontWeight.w900,
+                    fontSize: resp.isTablet ? 24 : 20, fontWeight: FontWeight.w900,
                     color: Colors.white)),
               ),
             ),
           ]),
-        ),
+        );
+      }),
       ),
     ]),
   );
@@ -416,23 +435,29 @@ class _HeaderChip extends StatelessWidget {
   const _HeaderChip(this.icon, this.label, this.bg, this.fg, {this.trailing});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: fg.withValues(alpha: 0.2)),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 10, color: fg),
-      const SizedBox(width: 4),
-      Text(label,
-        style: GoogleFonts.inter(
-          fontSize: 11, fontWeight: FontWeight.w700, color: fg),
-        maxLines: 1, overflow: TextOverflow.ellipsis),
-      if (trailing != null) ...[const SizedBox(width: 2), trailing!],
-    ]),
-  );
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: resp.isTablet ? 11 : 9,
+        vertical: resp.isTablet ? 6 : 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: fg.withValues(alpha: 0.2)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: resp.isTablet ? 13 : 10, color: fg),
+        const SizedBox(width: 4),
+        Text(label,
+          style: GoogleFonts.inter(
+            fontSize: resp.isTablet ? 13 : 11,
+            fontWeight: FontWeight.w700, color: fg),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        if (trailing != null) ...[const SizedBox(width: 2), trailing!],
+      ]),
+    );
+  }
 }
 
 // ── Revenue strip ─────────────────────────────────────────────────────────────
@@ -445,8 +470,10 @@ class _RevenueStrip extends StatelessWidget {
     required this.todayTx, required this.currency, this.onNewSale});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    return Padding(
+    padding: EdgeInsets.fromLTRB(resp.hPad, 16, resp.hPad, 0),
     child: Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -491,9 +518,8 @@ class _RevenueStrip extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+          padding: EdgeInsets.all(resp.isTablet ? 24 : 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Top row: live badge + transactions
             Row(children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -508,9 +534,8 @@ class _RevenueStrip extends StatelessWidget {
                   const SizedBox(width: 5),
                   Text('LIVE  ·  ${DateFormat('d MMM').format(DateTime.now())}',
                     style: GoogleFonts.inter(
-                      fontSize: 9, fontWeight: FontWeight.w800,
-                      color: const Color(0xFF4ADE80),
-                      letterSpacing: 0.8)),
+                      fontSize: resp.isTablet ? 11 : 9, fontWeight: FontWeight.w800,
+                      color: const Color(0xFF4ADE80), letterSpacing: 0.8)),
                 ]),
               ),
               const Spacer(),
@@ -522,19 +547,15 @@ class _RevenueStrip extends StatelessWidget {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
                 child: Text('$todayTx txns',
                   style: GoogleFonts.inter(
-                    fontSize: 10, fontWeight: FontWeight.w700,
+                    fontSize: resp.isTablet ? 12 : 10, fontWeight: FontWeight.w700,
                     color: Colors.white.withValues(alpha: 0.55))),
               ),
             ]),
-
             const SizedBox(height: 18),
-
-            // Main revenue figure
             Text("TODAY'S REVENUE",
               style: GoogleFonts.inter(
-                fontSize: 9, fontWeight: FontWeight.w700,
-                color: Colors.white.withValues(alpha: 0.35),
-                letterSpacing: 1.2)),
+                fontSize: resp.isTablet ? 11 : 9, fontWeight: FontWeight.w700,
+                color: Colors.white.withValues(alpha: 0.35), letterSpacing: 1.2)),
             const SizedBox(height: 5),
             FittedBox(
               fit: BoxFit.scaleDown,
@@ -543,14 +564,11 @@ class _RevenueStrip extends StatelessWidget {
                 target: todayRevenue,
                 prefix: '$currency ',
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 34, fontWeight: FontWeight.w900,
+                  fontSize: resp.isTablet ? 42 : 34, fontWeight: FontWeight.w900,
                   color: Colors.white, letterSpacing: -1.0, height: 1.0),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Month + Profit sub-row
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -563,14 +581,14 @@ class _RevenueStrip extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('MONTH',
                       style: GoogleFonts.inter(
-                        fontSize: 8, fontWeight: FontWeight.w800,
+                        fontSize: resp.isTablet ? 10 : 8, fontWeight: FontWeight.w800,
                         color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
                     const SizedBox(height: 2),
                     CountUpText(
                       target: monthRevenue,
                       prefix: '$currency ',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14, fontWeight: FontWeight.w900,
+                        fontSize: resp.isTablet ? 18 : 14, fontWeight: FontWeight.w900,
                         color: Colors.white.withValues(alpha: 0.85), letterSpacing: -0.3),
                     ),
                   ]),
@@ -583,7 +601,7 @@ class _RevenueStrip extends StatelessWidget {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('STATUS',
                         style: GoogleFonts.inter(
-                          fontSize: 8, fontWeight: FontWeight.w800,
+                          fontSize: resp.isTablet ? 10 : 8, fontWeight: FontWeight.w800,
                           color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
                       const SizedBox(height: 2),
                       Row(children: [
@@ -593,7 +611,7 @@ class _RevenueStrip extends StatelessWidget {
                         const SizedBox(width: 5),
                         Text('Active',
                           style: GoogleFonts.inter(
-                            fontSize: 13, fontWeight: FontWeight.w700,
+                            fontSize: resp.isTablet ? 15 : 13, fontWeight: FontWeight.w700,
                             color: const Color(0xFF4ADE80))),
                       ]),
                     ]),
@@ -601,15 +619,12 @@ class _RevenueStrip extends StatelessWidget {
                 ),
               ]),
             ),
-
             const SizedBox(height: 14),
-
-            // New Sale CTA
             GestureDetector(
               onTap: onNewSale,
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 13),
+                padding: EdgeInsets.symmetric(vertical: resp.isTablet ? 15 : 13),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFFF4A261), Color(0xFFD97706)],
@@ -625,7 +640,7 @@ class _RevenueStrip extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text('New Sale',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14, fontWeight: FontWeight.w900,
+                      fontSize: resp.isTablet ? 16 : 14, fontWeight: FontWeight.w900,
                       color: Colors.white, letterSpacing: 0.1)),
                 ]),
               ),
@@ -635,6 +650,7 @@ class _RevenueStrip extends StatelessWidget {
       ]),
     ),
   );
+  }
 }
 
 // ── KPI row (horizontal scroll) ───────────────────────────────────────────────
@@ -715,15 +731,24 @@ class _KpiRow extends StatelessWidget {
     if (resp.isTablet) {
       return Padding(
         padding: EdgeInsets.fromLTRB(resp.hPad, 14, resp.hPad, 0),
-        child: GridView.count(
-          crossAxisCount: resp.isLargeTablet ? 4 : 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: resp.isLargeTablet ? 1.55 : 1.95,
-          children: kpis.map((k) => _KpiTile(kpi: k)).toList(),
-        ),
+        child: LayoutBuilder(builder: (ctx, cons) {
+          final cols = resp.isLargeTablet ? 4 : 2;
+          final spacing = 12.0;
+          final tileW = (cons.maxWidth - spacing * (cols - 1)) / cols;
+          // Tile content min height: padding(18)*2 + icon(50) + value(30) + label(18) + gap(8) = 142
+          // Add 20px breathing room → target 162px min
+          final tileH = tileW < 160 ? tileW / 0.95 : 162.0;
+          final ratio = tileW / tileH;
+          return GridView.count(
+            crossAxisCount: cols,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: ratio,
+            children: kpis.map((k) => _KpiTile(kpi: k)).toList(),
+          );
+        }),
       );
     }
 
@@ -772,8 +797,10 @@ class _KpiTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    final p = resp.isTablet ? 18.0 : 15.0;
     return Container(
-      width: 152,
+      width: resp.isTablet ? null : 152,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -792,7 +819,6 @@ class _KpiTile extends StatelessWidget {
         ],
       ),
       child: Stack(children: [
-        // Decorative orb — top right
         Positioned(
           top: -22, right: -22,
           child: Container(
@@ -802,7 +828,6 @@ class _KpiTile extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.08)),
           ),
         ),
-        // Decorative orb — bottom left
         Positioned(
           bottom: -18, left: -18,
           child: Container(
@@ -812,61 +837,62 @@ class _KpiTile extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.05)),
           ),
         ),
-        // Content
         Padding(
-          padding: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+          padding: EdgeInsets.all(p),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon pill
               Container(
-                width: 42, height: 42,
+                width: resp.isTablet ? 50 : 42,
+                height: resp.isTablet ? 50 : 42,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(13),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.22), width: 1),
                 ),
-                child: Icon(kpi.icon, color: Colors.white, size: 20),
+                child: Icon(kpi.icon, color: Colors.white,
+                  size: resp.isTablet ? 24 : 20),
               ),
               const Spacer(),
-              // Value
               Text(
                 kpi.value,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 19, fontWeight: FontWeight.w900,
+                  fontSize: resp.isTablet ? 24 : 19,
+                  fontWeight: FontWeight.w900,
                   color: Colors.white, letterSpacing: -0.6, height: 1.1),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
-              // P&L sub-value (gross profit line)
               if (kpi.subValue != null) ...[
                 const SizedBox(height: 3),
                 Row(children: [
                   Text(kpi.subValueLabel ?? '',
                     style: GoogleFonts.inter(
-                      fontSize: 8, color: Colors.white.withValues(alpha: 0.5))),
+                      fontSize: resp.isTablet ? 11 : 8,
+                      color: Colors.white.withValues(alpha: 0.5))),
                   const SizedBox(width: 4),
                   Text(kpi.subValue!,
                     style: GoogleFonts.inter(
-                      fontSize: 8, fontWeight: FontWeight.w700,
+                      fontSize: resp.isTablet ? 11 : 8,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white.withValues(alpha: 0.75))),
                 ]),
               ],
-              const SizedBox(height: 3),
-              // Label + sublabel row
+              const SizedBox(height: 4),
               Row(children: [
                 Expanded(
                   child: Text(
                     kpi.label,
                     style: GoogleFonts.inter(
-                      fontSize: 10.5, fontWeight: FontWeight.w700,
+                      fontSize: resp.isTablet ? 13 : 10.5,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white.withValues(alpha: 0.85),
                       letterSpacing: 0.1),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -874,7 +900,8 @@ class _KpiTile extends StatelessWidget {
                   child: Text(
                     kpi.sublabel,
                     style: GoogleFonts.inter(
-                      fontSize: 8, fontWeight: FontWeight.w700,
+                      fontSize: resp.isTablet ? 10 : 8,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white.withValues(alpha: 0.80)),
                   ),
                 ),
@@ -899,14 +926,22 @@ class _WeeklyChart extends StatelessWidget {
     final maxVal = points.map((p) => p.value).fold(0.0, (a, b) => a > b ? a : b);
     final total  = points.fold(0.0, (s, p) => s + p.value);
 
+    final resp = Responsive.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: EdgeInsets.fromLTRB(resp.hPad, 14, resp.hPad, 0),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: AppColors.border),
-          boxShadow: AppShadows.sm,
+          border: Border.all(
+            color: resp.isTablet ? const Color(0xFFCBD5E1) : AppColors.border,
+            width: resp.isTablet ? 1.5 : 1.0),
+          boxShadow: resp.isTablet ? [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 16, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4, offset: const Offset(0, 1)),
+          ] : AppShadows.sm,
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Header
@@ -915,38 +950,26 @@ class _WeeklyChart extends StatelessWidget {
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Container(width: 3, height: 14,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.accent, AppColors.accentDark],
-                          begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                        borderRadius: BorderRadius.circular(2))),
-                    const SizedBox(width: 8),
-                    Text('Weekly Revenue',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14, fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary, letterSpacing: -0.2)),
-                  ]),
-                  const SizedBox(height: 3),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 11),
-                    child: Text('$currency ${NumberFormat('#,##0').format(total.round())} this week',
-                      style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted)),
-                  ),
+                  Text('Weekly Revenue',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: resp.isTablet ? 17 : 15, fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary, letterSpacing: -0.4)),
+                  const SizedBox(height: 2),
+                  Text('$currency ${NumberFormat('#,##0').format(total.round())} · this week',
+                    style: GoogleFonts.inter(
+                      fontSize: resp.isTablet ? 13 : 11, fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted)),
                 ]),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.07),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20)),
-                child: Text('7D',
+                child: Text('7 DAYS',
                   style: GoogleFonts.inter(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    color: AppColors.primary)),
+                    fontSize: resp.isTablet ? 11 : 9, fontWeight: FontWeight.w900,
+                    color: AppColors.primary, letterSpacing: 0.5)),
               ),
             ]),
           ),
@@ -1087,28 +1110,21 @@ class _RecentSales extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
           child: Row(children: [
-            Row(children: [
-              Container(width: 3, height: 14,
-                decoration: BoxDecoration(
-                  color: AppColors.success,
-                  borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 8),
-              Text(label,
+            Expanded(
+              child: Text(label,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14, fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary, letterSpacing: -0.2)),
-            ]),
-            const Spacer(),
+                  fontSize: 15, fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary, letterSpacing: -0.4)),
+            ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.success.withValues(alpha: 0.2))),
-              child: Text('Today',
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20)),
+              child: Text('TODAY',
                 style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: AppColors.success)),
+                  fontSize: 9, fontWeight: FontWeight.w900,
+                  color: AppColors.success, letterSpacing: 0.5)),
             ),
           ]),
         ),
@@ -1147,10 +1163,12 @@ class _RecentSales extends StatelessWidget {
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
                       Row(children: [
-                        Text(s.invoiceNo,
-                          style: GoogleFonts.inter(
-                            fontSize: 10, fontWeight: FontWeight.w500,
-                            color: AppColors.textMuted)),
+                        Flexible(
+                          child: Text(s.invoiceNo,
+                            style: GoogleFonts.inter(
+                              fontSize: 10, fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted),
+                            maxLines: 1, overflow: TextOverflow.ellipsis)),
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1165,23 +1183,28 @@ class _RecentSales extends StatelessWidget {
                       ]),
                     ]),
                 ),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text(fmtFn(s.totalAmount),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13, fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary, letterSpacing: -0.3)),
-                  const SizedBox(height: 3),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8)),
-                    child: Text(s.status.toUpperCase(),
-                      style: GoogleFonts.inter(
-                        fontSize: 8.5, fontWeight: FontWeight.w800,
-                        color: statusColor, letterSpacing: 0.3)),
-                  ),
-                ]),
+                SizedBox(
+                  width: 90,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(fmtFn(s.totalAmount),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13, fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary, letterSpacing: -0.3))),
+                    const SizedBox(height: 3),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8)),
+                      child: Text(s.status.toUpperCase(),
+                        style: GoogleFonts.inter(
+                          fontSize: 8.5, fontWeight: FontWeight.w800,
+                          color: statusColor, letterSpacing: 0.3)),
+                    ),
+                  ])),
               ]),
             ),
             if (!isLast)
@@ -1223,7 +1246,7 @@ class _QuickActions extends StatelessWidget {
         icon: Icons.add_shopping_cart_rounded,
         label: 'New Sale',
         subtitle: 'Start a transaction',
-        color: AppColors.primary,
+        color: const Color(0xFF0E7C3A),
         bg: const Color(0xFFDCFCE7),
         badge: null,
         onTap: () => onTabSwitch?.call(2),
@@ -1232,7 +1255,7 @@ class _QuickActions extends StatelessWidget {
         icon: Icons.receipt_long_rounded,
         label: 'My Sales',
         subtitle: '${stats.todayTransactions} today',
-        color: const Color(0xFF0284C7),
+        color: const Color(0xFF0369A1),
         bg: const Color(0xFFE0F2FE),
         badge: null,
         onTap: () => onTabSwitch?.call(1),
@@ -1242,7 +1265,7 @@ class _QuickActions extends StatelessWidget {
         icon: Icons.receipt_long_rounded,
         label: 'Sales',
         subtitle: '${stats.todayTransactions} today',
-        color: AppColors.primary,
+        color: const Color(0xFF0E7C3A),
         bg: const Color(0xFFDCFCE7),
         badge: null,
         onTap: () => onTabSwitch?.call(1),
@@ -1251,7 +1274,7 @@ class _QuickActions extends StatelessWidget {
         icon: Icons.bar_chart_rounded,
         label: 'Analytics',
         subtitle: '$currency ${_k(stats.monthRevenue)}',
-        color: const Color(0xFF7C3AED),
+        color: const Color(0xFF6D28D9),
         bg: const Color(0xFFEDE9FE),
         badge: null,
         onTap: () => onTabSwitch?.call(3),
@@ -1260,7 +1283,7 @@ class _QuickActions extends StatelessWidget {
         icon: Icons.inventory_2_rounded,
         label: 'Inventory',
         subtitle: 'Manage stock',
-        color: AppColors.info,
+        color: const Color(0xFF0369A1),
         bg: AppColors.infoBg,
         badge: null,
         onTap: () => onTabSwitch?.call(2),
@@ -1268,47 +1291,58 @@ class _QuickActions extends StatelessWidget {
       _ActionCard(
         icon: Icons.warning_amber_rounded,
         label: 'Low Stock',
-        subtitle: '${stats.lowStockCount} items',
-        color: AppColors.warning,
+        subtitle: '${stats.lowStockCount} item${stats.lowStockCount == 1 ? '' : 's'}',
+        color: const Color(0xFFB45309),
         bg: AppColors.warningBg,
         badge: stats.lowStockCount > 0 ? stats.lowStockCount.toString() : null,
         onTap: () => onTabSwitch?.call(2),
       ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Text('Quick Actions',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14, fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary, letterSpacing: -0.2)),
-          ),
-          Text('Tap to navigate',
-            style: GoogleFonts.inter(
-              fontSize: 11, fontWeight: FontWeight.w500,
-              color: AppColors.textMuted)),
-        ]),
-        const SizedBox(height: 10),
-        Column(children: [
-          Row(children: [
-            Expanded(child: _QuickActionTile(action: actions[0])),
+    return LayoutBuilder(builder: (context, constraints) {
+      final resp = Responsive.of(context);
+      // On tablets show all actions in a single row; on phones keep 2×N grid
+      final cols = resp.isTablet ? actions.length : 2;
+      final rows = <List<_ActionCard>>[];
+      for (var i = 0; i < actions.length; i += cols) {
+        rows.add(actions.sublist(i, (i + cols).clamp(0, actions.length)));
+      }
+
+      return Padding(
+        padding: EdgeInsets.fromLTRB(resp.hPad, 14, resp.hPad, 0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('QUICK ACTIONS',
+                style: GoogleFonts.inter(
+                  fontSize: 9, fontWeight: FontWeight.w900,
+                  color: AppColors.primary, letterSpacing: 1.2)),
+            ),
             const SizedBox(width: 10),
-            Expanded(child: _QuickActionTile(action: actions[1])),
+            Expanded(
+              child: Container(height: 1,
+                color: AppColors.primary.withValues(alpha: 0.08))),
           ]),
-          if (actions.length > 2) ...[
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: _QuickActionTile(action: actions[2])),
-              const SizedBox(width: 10),
-              Expanded(child: _QuickActionTile(action: actions[3])),
-            ]),
-          ],
+          const SizedBox(height: 10),
+          Column(children: [
+            for (final row in rows) ...[
+              Row(children: [
+                for (var i = 0; i < row.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  Expanded(child: _QuickActionTile(action: row[i])),
+                ],
+              ]),
+              if (row != rows.last) const SizedBox(height: 10),
+            ],
+          ]),
         ]),
-      ]),
-    );
+      );
+    });
   }
 }
 
@@ -1333,67 +1367,96 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) => PressScale(
     onTap: action.onTap,
     child: Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      height: 116,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [BoxShadow(
-          color: action.color.withValues(alpha: 0.08),
-          blurRadius: 12, offset: const Offset(0, 4))],
-      ),
-      child: Row(children: [
-        Stack(clipBehavior: Clip.none, children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [action.color, action.color.withValues(alpha: 0.7)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [BoxShadow(
-                color: action.color.withValues(alpha: 0.3),
-                blurRadius: 8, offset: const Offset(0, 3))]),
-            child: Icon(action.icon, color: Colors.white, size: 20)),
-          if (action.badge != null)
-            Positioned(
-              top: -5, right: -5,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.danger,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white, width: 1.5)),
-                child: Text(action.badge!,
-                  style: GoogleFonts.inter(
-                    fontSize: 9, fontWeight: FontWeight.w900,
-                    color: Colors.white)))),
-        ]),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(action.label,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13, fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary, letterSpacing: -0.2)),
-            const SizedBox(height: 2),
-            Text(action.subtitle,
-              style: GoogleFonts.inter(
-                fontSize: 11, fontWeight: FontWeight.w500,
-                color: AppColors.textMuted),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          ]),
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _darken(action.color, 0.15),
+            action.color,
+          ],
         ),
-        Container(
-          width: 24, height: 24,
-          decoration: BoxDecoration(
-            color: action.color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(7)),
-          child: Icon(Icons.arrow_forward_rounded,
-            size: 13, color: action.color)),
+        boxShadow: [
+          BoxShadow(
+            color: action.color.withValues(alpha: 0.38),
+            blurRadius: 20, offset: const Offset(0, 8), spreadRadius: -3),
+          BoxShadow(
+            color: action.color.withValues(alpha: 0.12),
+            blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Stack(children: [
+        // Decorative orb top-right
+        Positioned(top: -24, right: -24,
+          child: Container(
+            width: 90, height: 90,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.08)))),
+        // Decorative orb bottom-left
+        Positioned(bottom: -18, left: -18,
+          child: Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.05)))),
+        // Content
+        Padding(
+          padding: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: icon + badge
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  width: 42, height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.22), width: 1)),
+                  child: Icon(action.icon, color: Colors.white, size: 20)),
+                const Spacer(),
+                if (action.badge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 6, offset: const Offset(0, 2))]),
+                    child: Text(action.badge!,
+                      style: GoogleFonts.inter(
+                        fontSize: 10, fontWeight: FontWeight.w900,
+                        color: action.color))),
+              ]),
+              const Spacer(),
+              // Label
+              Text(action.label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5, fontWeight: FontWeight.w900,
+                  color: Colors.white, letterSpacing: -0.3, height: 1.1)),
+              const SizedBox(height: 3),
+              // Subtitle
+              Text(action.subtitle,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5, fontWeight: FontWeight.w500,
+                  color: Colors.white.withValues(alpha: 0.65)),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
       ]),
     ),
   );
+
+  Color _darken(Color c, double amount) {
+    final hsl = HSLColor.fromColor(c);
+    return hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0)).toColor();
+  }
 }
 
 // ── Branch picker sheet ────────────────────────────────────────────────────────
@@ -1551,9 +1614,10 @@ class _BranchCarousel extends StatefulWidget {
   final String currency;
   final int activeBranchId;
   final VoidCallback? onNewSale;
+  final AuthUser user;
   const _BranchCarousel({
     required this.branches, required this.currency,
-    required this.activeBranchId, this.onNewSale,
+    required this.activeBranchId, required this.user, this.onNewSale,
   });
   @override
   State<_BranchCarousel> createState() => _BranchCarouselState();
@@ -1599,15 +1663,13 @@ class _BranchCarouselState extends State<_BranchCarousel> {
     final ranked = _rankedIds;
     final maxRev = widget.branches.isEmpty ? 1.0
         : widget.branches.map((b) => b.todayRevenue).reduce((a, b) => a > b ? a : b);
-    final maxProfit = widget.branches.isEmpty ? 1.0
-        : widget.branches.map((b) => b.monthProfit.abs()).fold(0.0, (a, b) => a > b ? a : b);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // ── Swipeable branch cards ──────────────────────────────────────
         SizedBox(
-          height: 380,
+          height: 400,
           child: PageView.builder(
             controller: _ctrl,
             itemCount: widget.branches.length,
@@ -1623,250 +1685,311 @@ class _BranchCarouselState extends State<_BranchCarousel> {
               rank: ranked.indexOf(widget.branches[i].branchId) + 1,
               totalBranches: widget.branches.length,
               onNewSale: widget.onNewSale,
+              user: widget.user,
             ),
           ),
         ),
 
-        // ── Dot indicators ──────────────────────────────────────────────
+        // ── Branch name tab indicators ──────────────────────────────────
         if (widget.branches.length > 1) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(widget.branches.length, (i) =>
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: _page == i ? 22 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: _page == i ? AppColors.accent : const Color(0xFFD1D5DB),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: List.generate(widget.branches.length, (i) {
+                final isActive = _page == i;
+                final b = widget.branches[i];
+                return GestureDetector(
+                  onTap: () {
+                    _timer?.cancel();
+                    _ctrl.animateToPage(i,
+                      duration: const Duration(milliseconds: 420),
+                      curve: Curves.easeInOutCubic);
+                    if (widget.branches.length > 1) _startTimer();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 280),
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isActive ? 14 : 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? AppColors.primary
+                          : const Color(0xFFEEF0F3),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: isActive ? [BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.28),
+                        blurRadius: 10, offset: const Offset(0, 4))] : [],
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (isActive) ...[
+                        Container(
+                          width: 5, height: 5,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF4ADE80), shape: BoxShape.circle)),
+                        const SizedBox(width: 5),
+                      ],
+                      Text(b.branchName,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                          color: isActive ? Colors.white : const Color(0xFF9CA3AF)),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ]),
+                  ),
+                );
+              }),
             ),
           ),
         ],
 
-        // ── Corporate performance comparison panel ──────────────────────
+        // ── Branch leaderboard panel ─────────────────────────────────────
         if (widget.branches.length > 1) ...[
           const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          Builder(builder: (ctx) {
+            final resp = Responsive.of(ctx);
+            return Padding(
+            padding: EdgeInsets.fromLTRB(resp.hPad, 0, resp.hPad, 0),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFF0F0F0)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 20, offset: const Offset(0, 6)),
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.04),
-                    blurRadius: 40, offset: const Offset(0, 12)),
-                ],
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: resp.isTablet ? const Color(0xFFCBD5E1) : AppColors.border,
+                  width: resp.isTablet ? 1.5 : 1.0),
+                boxShadow: resp.isTablet ? [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.07),
+                    blurRadius: 16, offset: const Offset(0, 4)),
+                ] : AppShadows.sm,
               ),
-              child: Column(children: [
-                // Header
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                // ── Header ─────────────────────────────────────────────
                 Container(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                  padding: EdgeInsets.fromLTRB(
+                    resp.isTablet ? 20 : 16,
+                    resp.isTablet ? 16 : 13,
+                    resp.isTablet ? 20 : 16,
+                    resp.isTablet ? 16 : 13),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0B1E10),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0B1E10), Color(0xFF0F2D1A)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
                   ),
                   child: Row(children: [
                     Container(
-                      width: 32, height: 32,
+                      width: resp.isTablet ? 40 : 32,
+                      height: resp.isTablet ? 40 : 32,
                       decoration: BoxDecoration(
                         color: AppColors.accent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(10)),
                       child: Icon(Icons.leaderboard_rounded,
-                          size: 16, color: AppColors.accent),
+                        size: resp.isTablet ? 20 : 16, color: AppColors.accent),
                     ),
-                    const SizedBox(width: 10),
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Branch Performance',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13, fontWeight: FontWeight.w800,
-                          color: Colors.white, letterSpacing: -0.2)),
-                      Text("Today's ranking by revenue",
-                        style: GoogleFonts.inter(
-                          fontSize: 9, color: Colors.white.withValues(alpha: 0.45))),
-                    ]),
-                    const Spacer(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Branch Leaderboard',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: resp.isTablet ? 16 : 13,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white, letterSpacing: -0.2)),
+                        Text('Today\'s revenue · ${DateFormat('d MMM yyyy').format(DateTime.now())}',
+                          style: GoogleFonts.inter(
+                            fontSize: resp.isTablet ? 12 : 10,
+                            color: Colors.white.withValues(alpha: 0.5))),
+                      ]),
+                    ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
-                      child: Text(DateFormat('d MMM').format(DateTime.now()),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.3))),
+                      child: Text('LIVE',
                         style: GoogleFonts.inter(
-                          fontSize: 9, fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.5))),
+                          fontSize: resp.isTablet ? 11 : 9,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF4ADE80), letterSpacing: 0.5)),
                     ),
                   ]),
                 ),
 
-                // Column headers
+                // ── Branch rows ─────────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
-                  child: Row(children: [
-                    const SizedBox(width: 30),
-                    const SizedBox(width: 10),
-                    Expanded(flex: 3, child: Text('Branch',
-                      style: GoogleFonts.inter(
-                        fontSize: 8, fontWeight: FontWeight.w800,
-                        color: const Color(0xFF9CA3AF), letterSpacing: 0.6))),
-                    Expanded(flex: 4, child: Text('Revenue', textAlign: TextAlign.end,
-                      style: GoogleFonts.inter(
-                        fontSize: 8, fontWeight: FontWeight.w800,
-                        color: const Color(0xFF9CA3AF), letterSpacing: 0.6))),
-                    Expanded(flex: 3, child: Text('Profit', textAlign: TextAlign.end,
-                      style: GoogleFonts.inter(
-                        fontSize: 8, fontWeight: FontWeight.w800,
-                        color: const Color(0xFF9CA3AF), letterSpacing: 0.6))),
-                    Expanded(flex: 3, child: Text('Txns', textAlign: TextAlign.end,
-                      style: GoogleFonts.inter(
-                        fontSize: 8, fontWeight: FontWeight.w800,
-                        color: const Color(0xFF9CA3AF), letterSpacing: 0.6))),
-                  ]),
-                ),
+                  padding: EdgeInsets.all(resp.isTablet ? 16 : 12),
+                  child: Column(children: [
+                    ...ranked.asMap().entries.map((e) {
+                      final rank = e.key;
+                      final b = widget.branches.firstWhere((x) => x.branchId == e.value);
+                      final isViewing = widget.branches[_page].branchId == b.branchId;
+                      final pct = maxRev > 0 ? (b.todayRevenue / maxRev).clamp(0.0, 1.0) : 0.0;
+                      final profitPositive = b.monthProfit >= 0;
 
-                const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                      const medalColors = [Color(0xFFF59E0B), Color(0xFF94A3B8), Color(0xFFCD7F32)];
+                      final medalColor = rank < 3 ? medalColors[rank] : const Color(0xFFCBD5E1);
+                      final medal = rank == 0 ? '🥇' : rank == 1 ? '🥈' : rank == 2 ? '🥉' : null;
 
-                // Branch rows
-                ...ranked.asMap().entries.map((e) {
-                  final rank = e.key;
-                  final b = widget.branches.firstWhere((x) => x.branchId == e.value);
-                  final isViewing = widget.branches[_page].branchId == b.branchId;
-                  final pct = maxRev > 0 ? b.todayRevenue / maxRev : 0.0;
-                  final profitPositive = b.monthProfit >= 0;
+                      final fmtShort = (double v) {
+                        if (v >= 1000000) return '${(v/1000000).toStringAsFixed(1)}M';
+                        if (v >= 1000)    return '${(v/1000).toStringAsFixed(0)}K';
+                        return v.toInt().toString();
+                      };
 
-                  // Rank colors
-                  const rankColors = [Color(0xFFF59E0B), Color(0xFF94A3B8), Color(0xFFCD7F32)];
-                  final rankColor = rank < 3 ? rankColors[rank] : const Color(0xFFD1D5DB);
-                  final rankEmoji = rank == 0 ? '🥇' : rank == 1 ? '🥈' : rank == 2 ? '🥉' : '';
-
-                  final fmtShort = (double v) {
-                    if (v >= 1000000) return '${(v/1000000).toStringAsFixed(1)}M';
-                    if (v >= 1000)    return '${(v/1000).toStringAsFixed(0)}K';
-                    return v.toInt().toString();
-                  };
-
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    color: isViewing
-                        ? AppColors.primary.withValues(alpha: 0.03)
-                        : Colors.transparent,
-                    child: Column(children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 11, 18, 11),
-                        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                          // Rank
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 280),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: EdgeInsets.fromLTRB(
+                          resp.isTablet ? 16 : 12,
+                          resp.isTablet ? 14 : 11,
+                          resp.isTablet ? 16 : 12,
+                          resp.isTablet ? 14 : 11),
+                        decoration: BoxDecoration(
+                          gradient: isViewing
+                              ? LinearGradient(
+                                  colors: [
+                                    AppColors.primary.withValues(alpha: 0.06),
+                                    AppColors.primary.withValues(alpha: 0.02)],
+                                  begin: Alignment.topLeft, end: Alignment.bottomRight)
+                              : null,
+                          color: isViewing ? null : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isViewing
+                                ? AppColors.primary.withValues(alpha: 0.25)
+                                : const Color(0xFFEEF0F3),
+                            width: isViewing ? 1.5 : 1),
+                          boxShadow: isViewing ? [BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            blurRadius: 12, offset: const Offset(0, 4))] : [],
+                        ),
+                        child: Row(children: [
+                          // Medal / rank
                           SizedBox(
-                            width: 30,
-                            child: rank < 3
-                                ? Text(rankEmoji, style: const TextStyle(fontSize: 16))
+                            width: resp.isTablet ? 44 : 36,
+                            child: medal != null
+                                ? Text(medal,
+                                    style: TextStyle(fontSize: resp.isTablet ? 26 : 20),
+                                    textAlign: TextAlign.center)
                                 : Container(
-                                    width: 22, height: 22,
+                                    width: resp.isTablet ? 34 : 28,
+                                    height: resp.isTablet ? 34 : 28,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF9FAFB),
+                                      color: const Color(0xFFF3F4F6),
                                       shape: BoxShape.circle,
                                       border: Border.all(color: const Color(0xFFE5E7EB))),
-                                    child: Center(
-                                      child: Text('${rank + 1}',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 9, fontWeight: FontWeight.w900,
-                                          color: const Color(0xFF9CA3AF))))),
+                                    child: Center(child: Text('${rank + 1}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: resp.isTablet ? 13 : 10,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFF9CA3AF))))),
                           ),
-                          const SizedBox(width: 8),
-                          // Branch name + bar
-                          Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(b.branchName,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: isViewing ? FontWeight.w800 : FontWeight.w600,
-                                color: isViewing
-                                    ? AppColors.textPrimary
-                                    : const Color(0xFF6B7280))),
+                          SizedBox(width: resp.isTablet ? 14 : 10),
+                          // Name + bar
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Row(children: [
+                                Expanded(
+                                  child: Text(b.branchName,
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontSize: resp.isTablet ? 15 : 12,
+                                      fontWeight: isViewing ? FontWeight.w900 : FontWeight.w600,
+                                      color: isViewing
+                                          ? AppColors.textPrimary
+                                          : const Color(0xFF6B7280))),
+                                ),
+                                if (isViewing)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: AppColors.primary.withValues(alpha: 0.2))),
+                                    child: Text('CURRENT',
+                                      style: GoogleFonts.inter(
+                                        fontSize: resp.isTablet ? 10 : 7.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: AppColors.primary, letterSpacing: 0.5))),
+                              ]),
+                              SizedBox(height: resp.isTablet ? 8 : 6),
+                              LayoutBuilder(builder: (ctx, cons) => Stack(children: [
+                                Container(
+                                  height: resp.isTablet ? 6 : 5,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEEF0F3),
+                                    borderRadius: BorderRadius.circular(3))),
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 900),
+                                  curve: Curves.easeOutExpo,
+                                  height: resp.isTablet ? 6 : 5,
+                                  width: cons.maxWidth * pct,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [medalColor.withValues(alpha: 0.7), medalColor]),
+                                    borderRadius: BorderRadius.circular(3))),
+                              ])),
+                            ]),
+                          ),
+                          SizedBox(width: resp.isTablet ? 16 : 12),
+                          // Revenue + stats
+                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Text('${widget.currency} ${fmtShort(b.todayRevenue)}',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: resp.isTablet ? 17 : 13,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary, letterSpacing: -0.4)),
                             const SizedBox(height: 4),
-                            LayoutBuilder(builder: (ctx, cons) => Stack(children: [
-                              Container(
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF3F4F6),
-                                  borderRadius: BorderRadius.circular(2))),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 900),
-                                curve: Curves.easeOutExpo,
-                                height: 4,
-                                width: cons.maxWidth * pct,
-                                decoration: BoxDecoration(
-                                  color: rankColor,
-                                  borderRadius: BorderRadius.circular(2))),
-                            ])),
-                          ])),
-                          // Revenue
-                          Expanded(flex: 4, child: Text(
-                            '${widget.currency} ${fmtShort(b.todayRevenue)}',
-                            textAlign: TextAlign.end,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12, fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary))),
-                          // Profit
-                          Expanded(flex: 3, child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
+                            Row(mainAxisSize: MainAxisSize.min, children: [
                               Icon(
                                 profitPositive
-                                    ? Icons.arrow_drop_up_rounded
-                                    : Icons.arrow_drop_down_rounded,
-                                size: 14,
+                                    ? Icons.trending_up_rounded
+                                    : Icons.trending_down_rounded,
+                                size: resp.isTablet ? 14 : 12,
                                 color: profitPositive
                                     ? const Color(0xFF10B981)
                                     : const Color(0xFFEF4444)),
+                              const SizedBox(width: 3),
                               Text(fmtShort(b.monthProfit.abs()),
                                 style: GoogleFonts.inter(
-                                  fontSize: 11, fontWeight: FontWeight.w700,
+                                  fontSize: resp.isTablet ? 12 : 10,
+                                  fontWeight: FontWeight.w700,
                                   color: profitPositive
                                       ? const Color(0xFF10B981)
                                       : const Color(0xFFEF4444))),
-                            ],
-                          )),
-                          // Txns
-                          Expanded(flex: 3, child: Text(
-                            b.todayTransactions.toString(),
-                            textAlign: TextAlign.end,
-                            style: GoogleFonts.inter(
-                              fontSize: 12, fontWeight: FontWeight.w700,
-                              color: const Color(0xFF6B7280)))),
+                              const SizedBox(width: 8),
+                              Text('${b.todayTransactions} txns',
+                                style: GoogleFonts.inter(
+                                  fontSize: resp.isTablet ? 12 : 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF9CA3AF))),
+                            ]),
+                          ]),
                         ]),
-                      ),
-                      if (rank < ranked.length - 1)
-                        const Divider(height: 1, color: Color(0xFFF9FAFB), indent: 56),
-                    ]),
-                  );
-                }),
+                      );
+                    }),
 
-                // Footer note
-                Container(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
-                  decoration: const BoxDecoration(
-                    border: Border(top: BorderSide(color: Color(0xFFF3F4F6))),
-                  ),
-                  child: Row(children: [
-                    Icon(Icons.info_outline_rounded, size: 11, color: const Color(0xFFD1D5DB)),
-                    const SizedBox(width: 5),
-                    Text('Revenue = today · Profit = this month · Swipe cards above',
-                      style: GoogleFonts.inter(
-                        fontSize: 9, color: const Color(0xFFD1D5DB))),
+                    // Footer hint
+                    Row(children: [
+                      Icon(Icons.swipe_rounded,
+                        size: resp.isTablet ? 13 : 11,
+                        color: const Color(0xFFCBD5E1)),
+                      const SizedBox(width: 5),
+                      Text('Swipe cards above · Revenue = today · Profit = this month',
+                        style: GoogleFonts.inter(
+                          fontSize: resp.isTablet ? 11 : 9,
+                          color: const Color(0xFFCBD5E1))),
+                    ]),
                   ]),
                 ),
               ]),
             ),
-          ),
+          );
+          }),
         ],
       ],
     );
@@ -1880,16 +2003,22 @@ class _BranchCard extends StatelessWidget {
   final int rank;
   final int totalBranches;
   final VoidCallback? onNewSale;
+  final AuthUser user;
   const _BranchCard({
     required this.branch, required this.currency,
     required this.isActive, required this.rank, required this.totalBranches,
-    this.onNewSale,
+    required this.user, this.onNewSale,
   });
 
   String _fmt(double v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
     if (v >= 1000)    return '${(v / 1000).toStringAsFixed(0)}K';
     return NumberFormat('#,###').format(v.toInt());
+  }
+
+  void _navigateToProfit(BuildContext context) {
+    Navigator.push(context,
+      MaterialPageRoute(builder: (_) => ProductProfitScreen(user: user)));
   }
 
   @override
@@ -1907,37 +2036,51 @@ class _BranchCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF050F08), Color(0xFF081A0F), Color(0xFF0F2D1A)],
+            colors: [Color(0xFF03100A), Color(0xFF071C10), Color(0xFF0D2818)],
             begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.45),
-              blurRadius: 28, spreadRadius: -4, offset: const Offset(0, 10)),
+              color: AppColors.primary.withValues(alpha: 0.5),
+              blurRadius: 36, spreadRadius: -6, offset: const Offset(0, 14)),
           ],
         ),
-        child: Stack(children: [
-          // Glow
-          Positioned(top: -60, right: -50,
+        child: Stack(clipBehavior: Clip.hardEdge, children: [
+
+          // ── Large rank watermark ──────────────────────────────────────
+          if (totalBranches > 1)
+            Positioned(right: -10, top: -8,
+              child: Text('#$rank',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 110, fontWeight: FontWeight.w900,
+                  color: Colors.white.withValues(alpha: 0.04),
+                  letterSpacing: -6, height: 1),
+              ),
+            ),
+
+          // ── Radial glow — top right ───────────────────────────────────
+          Positioned(top: -80, right: -60,
             child: Container(
-              width: 220, height: 220,
+              width: 260, height: 260,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(colors: [
-                  const Color(0xFF2D6A4F).withValues(alpha: 0.2),
+                  const Color(0xFF2D6A4F).withValues(alpha: 0.22),
                   Colors.transparent,
                 ]),
               ),
             ),
           ),
-          Positioned(bottom: -30, left: -20,
+
+          // ── Accent glow — bottom left ─────────────────────────────────
+          Positioned(bottom: -40, left: -30,
             child: Container(
-              width: 120, height: 120,
+              width: 160, height: 160,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(colors: [
-                  AppColors.accent.withValues(alpha: 0.08),
+                  AppColors.accent.withValues(alpha: 0.1),
                   Colors.transparent,
                 ]),
               ),
@@ -1945,151 +2088,229 @@ class _BranchCard extends StatelessWidget {
           ),
 
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-              // ── Header row ────────────────────────────────────────────
-              Row(children: [
-                Container(width: 3, height: 16,
+              // ── Top row: branch name + badges ─────────────────────────
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                // Branch icon
+                Container(
+                  width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.accent, borderRadius: BorderRadius.circular(2))),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(branch.branchName,
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 13, fontWeight: FontWeight.w700,
-                      color: Colors.white.withValues(alpha: 0.8))),
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
+                  child: Icon(
+                    Icons.storefront_rounded,
+                    size: 17, color: Colors.white.withValues(alpha: 0.6)),
                 ),
-                const SizedBox(width: 8),
-                // Rank badge
-                if (totalBranches > 1)
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(branch.branchName,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15, fontWeight: FontWeight.w900,
+                        color: Colors.white, letterSpacing: -0.4, height: 1.1)),
+                    if (isActive)
+                      Text('Active branch',
+                        style: GoogleFonts.inter(
+                          fontSize: 9, fontWeight: FontWeight.w600,
+                          color: const Color(0xFF4ADE80).withValues(alpha: 0.8))),
+                  ]),
+                ),
+                // Rank medal
+                if (totalBranches > 1) ...[
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: rank == 1
-                          ? const Color(0xFFF59E0B).withValues(alpha: 0.2)
-                          : Colors.white.withValues(alpha: 0.06),
+                          ? const Color(0xFFF59E0B).withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: rank == 1
                             ? const Color(0xFFF59E0B).withValues(alpha: 0.4)
                             : Colors.white.withValues(alpha: 0.1))),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (rank == 1) ...[
-                        const Text('🥇', style: TextStyle(fontSize: 10)),
-                        const SizedBox(width: 3),
-                      ],
-                      Text('#$rank of $totalBranches',
+                      Text(rank == 1 ? '🥇' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '',
+                        style: const TextStyle(fontSize: 11)),
+                      if (rank > 3) ...[
+                        Text('#$rank',
+                          style: GoogleFonts.inter(
+                            fontSize: 10, fontWeight: FontWeight.w900,
+                            color: Colors.white.withValues(alpha: 0.5))),
+                      ] else
+                        const SizedBox(width: 2),
+                      Text(' of $totalBranches',
                         style: GoogleFonts.inter(
-                          fontSize: 9, fontWeight: FontWeight.w800,
+                          fontSize: 9, fontWeight: FontWeight.w600,
                           color: rank == 1
-                              ? const Color(0xFFF59E0B)
-                              : Colors.white.withValues(alpha: 0.5))),
+                              ? const Color(0xFFF59E0B).withValues(alpha: 0.8)
+                              : Colors.white.withValues(alpha: 0.4))),
                     ]),
                   ),
-                const SizedBox(width: 6),
-                // Active dot + txn count
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Container(width: 5, height: 5,
-                      decoration: BoxDecoration(
-                        color: isActive ? const Color(0xFF4ADE80) : Colors.white.withValues(alpha: 0.3),
-                        shape: BoxShape.circle)),
-                    const SizedBox(width: 4),
-                    Text('${branch.todayTransactions} txns',
+                ],
+              ]),
+
+              const SizedBox(height: 20),
+
+              // ── Revenue hero ──────────────────────────────────────────
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text("TODAY'S REVENUE",
                       style: GoogleFonts.inter(
                         fontSize: 9, fontWeight: FontWeight.w700,
-                        color: Colors.white.withValues(alpha: 0.5))),
+                        color: Colors.white.withValues(alpha: 0.3), letterSpacing: 1.3)),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: CountUpText(
+                        target: branch.todayRevenue,
+                        prefix: '$currency ',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 36, fontWeight: FontWeight.w900,
+                          color: Colors.white, letterSpacing: -1.5, height: 1.0),
+                      ),
+                    ),
+                  ]),
+                ),
+                // Txns badge (top right of revenue)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    Text('${branch.todayTransactions}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18, fontWeight: FontWeight.w900,
+                        color: Colors.white, height: 1.1)),
+                    Text('txns',
+                      style: GoogleFonts.inter(
+                        fontSize: 8, fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.4))),
                   ]),
                 ),
               ]),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
 
-              // ── Today Revenue ─────────────────────────────────────────
-              Text("TODAY'S REVENUE",
-                style: GoogleFonts.inter(
-                  fontSize: 9, fontWeight: FontWeight.w700,
-                  color: Colors.white.withValues(alpha: 0.35), letterSpacing: 1.2)),
-              const SizedBox(height: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: CountUpText(
-                  target: branch.todayRevenue,
-                  prefix: '$currency ',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 32, fontWeight: FontWeight.w900,
-                    color: Colors.white, letterSpacing: -1.0, height: 1.0),
-                ),
-              ),
-
-              const SizedBox(height: 6),
-
-              // ── Today Profit ──────────────────────────────────────────
+              // ── Today profit chip ─────────────────────────────────────
               Row(children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
                   decoration: BoxDecoration(
                     color: profitColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: profitColor.withValues(alpha: 0.25))),
+                    border: Border.all(color: profitColor.withValues(alpha: 0.28))),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(profitIcon, size: 12, color: profitColor),
-                    const SizedBox(width: 4),
-                    Text('$currency ${_fmt(branch.todayProfit.abs())}',
+                    Icon(profitIcon, size: 13, color: profitColor),
+                    const SizedBox(width: 5),
+                    Text('$currency ${_fmt(branch.todayProfit.abs())} profit',
                       style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w700,
-                        color: profitColor)),
-                    const SizedBox(width: 4),
-                    Text('profit today',
-                      style: GoogleFonts.inter(
-                        fontSize: 10, fontWeight: FontWeight.w500,
-                        color: profitColor.withValues(alpha: 0.7))),
+                        fontSize: 11, fontWeight: FontWeight.w700, color: profitColor)),
                   ]),
                 ),
                 const SizedBox(width: 8),
-                Text('$marginPct% margin',
-                  style: GoogleFonts.inter(
-                    fontSize: 10, color: Colors.white.withValues(alpha: 0.3))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(20)),
+                  child: Text('$marginPct% margin',
+                    style: GoogleFonts.inter(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.4))),
+                ),
               ]),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
-              // ── Month stats row ───────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: Row(children: [
-                  // Month revenue
-                  Expanded(child: _StatCell(
-                    label: 'MONTH REVENUE',
-                    value: '$currency ${_fmt(branch.monthRevenue)}',
-                    valueColor: Colors.white.withValues(alpha: 0.9),
-                  )),
-                  Container(width: 1, height: 32, color: Colors.white.withValues(alpha: 0.08)),
-                  // Month profit
-                  Expanded(child: Padding(
-                    padding: const EdgeInsets.only(left: 14),
-                    child: _StatCell(
-                      label: 'MONTH PROFIT',
-                      value: '$currency ${_fmt(branch.monthProfit.abs())}',
-                      valueColor: branch.monthProfit >= 0
-                          ? const Color(0xFF4ADE80)
-                          : const Color(0xFFFF6B6B),
-                      prefix: branch.monthProfit >= 0 ? '▲ ' : '▼ ',
+              // ── 3-tile stat grid ──────────────────────────────────────
+              IntrinsicHeight(
+                child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  // Tile 1: Month Revenue
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('MONTH',
+                          style: GoogleFonts.inter(
+                            fontSize: 7.5, fontWeight: FontWeight.w900,
+                            color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
+                        const SizedBox(height: 5),
+                        Text('$currency ${_fmt(branch.monthRevenue)}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13, fontWeight: FontWeight.w900,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            letterSpacing: -0.4),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('revenue',
+                          style: GoogleFonts.inter(
+                            fontSize: 8, fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.3))),
+                      ]),
                     ),
-                  )),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Tile 2: Month Profit — tappable, navigates to profit-by-product
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _navigateToProfit(context),
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: branch.monthProfit >= 0
+                              ? const Color(0xFF4ADE80).withValues(alpha: 0.08)
+                              : const Color(0xFFFF6B6B).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: branch.monthProfit >= 0
+                                ? const Color(0xFF4ADE80).withValues(alpha: 0.2)
+                                : const Color(0xFFFF6B6B).withValues(alpha: 0.2))),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            Text('PROFIT',
+                              style: GoogleFonts.inter(
+                                fontSize: 7.5, fontWeight: FontWeight.w900,
+                                color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
+                            const SizedBox(width: 3),
+                            Icon(Icons.chevron_right_rounded, size: 11,
+                              color: branch.monthProfit >= 0
+                                  ? const Color(0xFF4ADE80).withValues(alpha: 0.5)
+                                  : const Color(0xFFFF6B6B).withValues(alpha: 0.5)),
+                          ]),
+                          const SizedBox(height: 5),
+                          Text('$currency ${_fmt(branch.monthProfit.abs())}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13, fontWeight: FontWeight.w900,
+                              color: branch.monthProfit >= 0
+                                  ? const Color(0xFF4ADE80)
+                                  : const Color(0xFFFF6B6B),
+                              letterSpacing: -0.4),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('by product →',
+                            style: GoogleFonts.inter(
+                              fontSize: 8, fontWeight: FontWeight.w600,
+                              color: branch.monthProfit >= 0
+                                  ? const Color(0xFF4ADE80).withValues(alpha: 0.5)
+                                  : const Color(0xFFFF6B6B).withValues(alpha: 0.5))),
+                        ]),
+                      ),
+                    ),
+                  ),
                 ]),
               ),
 
@@ -2100,21 +2321,21 @@ class _BranchCard extends StatelessWidget {
                 onTap: onNewSale,
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFFF4A261), Color(0xFFD97706)],
                       begin: Alignment.topLeft, end: Alignment.bottomRight),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.4),
-                      blurRadius: 14, offset: const Offset(0, 5))]),
+                      color: AppColors.accent.withValues(alpha: 0.45),
+                      blurRadius: 18, offset: const Offset(0, 6))]),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    const Icon(Icons.add_circle_rounded, color: Colors.white, size: 16),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.add_circle_rounded, color: Colors.white, size: 17),
+                    const SizedBox(width: 9),
                     Text('New Sale',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14, fontWeight: FontWeight.w900,
+                        fontSize: 15, fontWeight: FontWeight.w900,
                         color: Colors.white, letterSpacing: 0.1)),
                   ]),
                 ),
@@ -2127,32 +2348,6 @@ class _BranchCard extends StatelessWidget {
   }
 }
 
-class _StatCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color valueColor;
-  final String prefix;
-  const _StatCell({
-    required this.label, required this.value, required this.valueColor,
-    this.prefix = '',
-  });
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label,
-        style: GoogleFonts.inter(
-          fontSize: 7, fontWeight: FontWeight.w800,
-          color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
-      const SizedBox(height: 4),
-      Text('$prefix$value',
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 13, fontWeight: FontWeight.w800,
-          color: valueColor, letterSpacing: -0.2),
-        maxLines: 1, overflow: TextOverflow.ellipsis),
-    ],
-  );
-}
 
 // ── Cashier shift card ────────────────────────────────────────────────────────
 class _CashierShiftCard extends StatelessWidget {
@@ -2368,6 +2563,239 @@ class _CashierShiftCard extends StatelessWidget {
       ]),
     ),
   );
+}
+
+// ── Stock Value Card ──────────────────────────────────────────────────────────
+class _StockValueCard extends StatelessWidget {
+  final StockValueSummary summary;
+  final String currency;
+  const _StockValueCard({required this.summary, required this.currency});
+
+  String _fmt(double v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000)    return '${(v / 1000).toStringAsFixed(0)}K';
+    return v.toStringAsFixed(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profitPct = summary.marginPct;
+    final resp = Responsive.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(resp.hPad, 14, resp.hPad, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: resp.isTablet ? const Color(0xFFCBD5E1) : AppColors.border,
+            width: resp.isTablet ? 1.5 : 1.0),
+          boxShadow: resp.isTablet ? [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 16, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4, offset: const Offset(0, 1)),
+          ] : AppShadows.sm,
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // ── Header ──────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0B1E10), Color(0xFF0F2D1A)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: Row(children: [
+              Container(
+                width: resp.isTablet ? 40 : 34,
+                height: resp.isTablet ? 40 : 34,
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.inventory_2_rounded,
+                  size: resp.isTablet ? 20 : 17, color: AppColors.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Stock Value',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: resp.isTablet ? 16 : 14, fontWeight: FontWeight.w800,
+                      color: Colors.white, letterSpacing: -0.2)),
+                  Text('${summary.totalProducts} products · ${_fmt(summary.totalUnits)} units',
+                    style: GoogleFonts.inter(
+                      fontSize: resp.isTablet ? 12 : 10,
+                      color: Colors.white.withValues(alpha: 0.5))),
+                ]),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3))),
+                child: Text('${profitPct.toStringAsFixed(1)}% margin',
+                  style: GoogleFonts.inter(
+                    fontSize: resp.isTablet ? 12 : 10, fontWeight: FontWeight.w800,
+                    color: const Color(0xFF4ADE80))),
+              ),
+            ]),
+          ),
+
+          // ── 3 value tiles ────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: Row(children: [
+              _StockValueTile(
+                label: 'At Cost',
+                value: '$currency ${_fmt(summary.totalCostValue)}',
+                icon: Icons.shopping_bag_outlined,
+                color: const Color(0xFF0284C7),
+              ),
+              const SizedBox(width: 10),
+              _StockValueTile(
+                label: 'At Selling',
+                value: '$currency ${_fmt(summary.totalSellingValue)}',
+                icon: Icons.sell_outlined,
+                color: const Color(0xFF059669),
+              ),
+              const SizedBox(width: 10),
+              _StockValueTile(
+                label: 'Potential Profit',
+                value: '$currency ${_fmt(summary.potentialProfit)}',
+                icon: Icons.trending_up_rounded,
+                color: AppColors.accent,
+              ),
+            ]),
+          ),
+
+          // ── Top products by capital ──────────────────────────────────────────
+          if (summary.topProducts.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+              child: Row(children: [
+                Container(width: 3, height: 12,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(width: 8),
+                Text('Top by Capital',
+                  style: GoogleFonts.inter(
+                    fontSize: resp.isTablet ? 13 : 11, fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary, letterSpacing: 0.1)),
+                const Spacer(),
+                Text('cost value',
+                  style: GoogleFonts.inter(
+                    fontSize: resp.isTablet ? 11 : 9, color: AppColors.textMuted)),
+              ]),
+            ),
+            ...summary.topProducts.take(5).map((p) {
+              final pct = summary.totalCostValue > 0
+                  ? p.valueAtCost / summary.totalCostValue
+                  : 0.0;
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Row(children: [
+                  Expanded(
+                    flex: 5,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(p.name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: resp.isTablet ? 13 : 11, fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
+                      const SizedBox(height: 4),
+                      LayoutBuilder(builder: (ctx, cons) => Stack(children: [
+                        Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(2))),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 900),
+                          curve: Curves.easeOutExpo,
+                          height: 4,
+                          width: cons.maxWidth * pct.clamp(0, 1),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF0F2D1A), Color(0xFF10B981)]),
+                            borderRadius: BorderRadius.circular(2))),
+                      ])),
+                    ]),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('$currency ${_fmt(p.valueAtCost)}',
+                      style: GoogleFonts.inter(
+                        fontSize: resp.isTablet ? 13 : 11, fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary)),
+                    Text('${p.qty.toInt()} units',
+                      style: GoogleFonts.inter(
+                        fontSize: resp.isTablet ? 11 : 9, color: AppColors.textMuted)),
+                  ]),
+                ]),
+              );
+            }),
+          ],
+
+          const SizedBox(height: 14),
+        ]),
+      ),
+    );
+  }
+}
+
+class _StockValueTile extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  final Color color;
+  const _StockValueTile({
+    required this.label, required this.value,
+    required this.icon, required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final resp = Responsive.of(context);
+    return Expanded(
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: resp.isTablet ? 14 : 12,
+          vertical: resp.isTablet ? 13 : 11),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: resp.isTablet
+                ? color.withValues(alpha: 0.22)
+                : color.withValues(alpha: 0.12),
+            width: resp.isTablet ? 1.5 : 1.0),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: resp.isTablet ? 32 : 28,
+            height: resp.isTablet ? 32 : 28,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: resp.isTablet ? 16 : 14, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: resp.isTablet ? 15 : 13, fontWeight: FontWeight.w900,
+              color: AppColors.textPrimary, letterSpacing: -0.4),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(label,
+            style: GoogleFonts.inter(
+              fontSize: resp.isTablet ? 11 : 9, fontWeight: FontWeight.w700,
+              color: AppColors.textMuted)),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Shimmer ───────────────────────────────────────────────────────────────────

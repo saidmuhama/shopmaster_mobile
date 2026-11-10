@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/pin_service.dart';
@@ -83,6 +84,9 @@ class _StockScreenState extends State<StockScreen>
       ['owner', 'manager'].contains(_user!.role) &&
       _user!.canAccess('stock');
 
+  // Only owner can delete products
+  bool get _canDelete => _user != null && _user!.role == 'owner';
+
   // All authenticated users can adjust stock and add products
   bool get _canAdjust => true;
 
@@ -119,6 +123,32 @@ class _StockScreenState extends State<StockScreen>
   int get _outCount  => _all.where((p) => p.isOutOfStock).length;
   int get _lowCount  => _all.where((p) => p.isLowStock && !p.isOutOfStock).length;
   int get _goodCount => _all.length - _outCount - _lowCount;
+
+  // ── Export ───────────────────────────────────────────────────────────────
+  void _showExportSheet() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ExportSheet(
+        title: 'Export Stock Report',
+        onExport: (format) async {
+          Navigator.pop(context);
+          final url = ApiService.exportUrl(type: 'stock', format: format);
+          final uri = Uri.parse(url);
+          try {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not open export. Try again.',
+                  style: GoogleFonts.inter(fontSize: 13))));
+            }
+          }
+        },
+      ),
+    );
+  }
 
   // ── Add-product sheet ────────────────────────────────────────────────────
   void _openAddProduct() {
@@ -205,6 +235,22 @@ class _StockScreenState extends State<StockScreen>
                       ],
                     ),
                   ),
+                  // Export button
+                  GestureDetector(
+                    onTap: _showExportSheet,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.accent.withValues(alpha: 0.25)),
+                      ),
+                      child: const Icon(Icons.download_rounded,
+                        color: AppColors.accent, size: 20),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   // Adjustments history button
                   GestureDetector(
                     onTap: () => Navigator.push(
@@ -425,8 +471,10 @@ class _StockScreenState extends State<StockScreen>
                       emptySubtitle: 'Tap "+ Add Product" to add your first product',
                       canAdjust: _canAdjust,
                       canEdit: _canEdit,
+                      canDelete: _canDelete,
                       onAdjust: _showAdjustSheet,
-                      onEdit: _showEditSheet),
+                      onEdit: _showEditSheet,
+                      onDelete: _showDeleteProductConfirm),
                     _StockList(
                       items: _lowStock,
                       listCtrl: _listCtrl,
@@ -435,8 +483,10 @@ class _StockScreenState extends State<StockScreen>
                       emptyIcon: Icons.check_circle_outline_rounded,
                       canAdjust: _canAdjust,
                       canEdit: _canEdit,
+                      canDelete: _canDelete,
                       onAdjust: _showAdjustSheet,
-                      onEdit: _showEditSheet),
+                      onEdit: _showEditSheet,
+                      onDelete: _showDeleteProductConfirm),
                   ],
                 ),
         ),
@@ -469,6 +519,95 @@ class _StockScreenState extends State<StockScreen>
         },
       ),
     );
+  }
+
+  Future<void> _showDeleteProductConfirm(StockItem item) async {
+    HapticFeedback.mediumImpact();
+
+    // Capture refs before any async gap
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.delete_outline_rounded,
+              color: Colors.red, size: 20)),
+          const SizedBox(width: 12),
+          Text('Delete Product',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 16, fontWeight: FontWeight.w900,
+              color: AppColors.textPrimary)),
+        ]),
+        content: Text(
+          'Delete "${item.name}"? It will be hidden from all views. This cannot be undone.',
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10))),
+            child: Text('Delete',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w900))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final res = await ApiService.deleteProduct(item.id);
+      if (res['ok'] == true) {
+        if (mounted) {
+          setState(() {
+            _all      = _all.where((p) => p.id != item.id).toList();
+            _filtered = _filtered.where((p) => p.id != item.id).toList();
+          });
+        }
+        messenger.showSnackBar(SnackBar(
+          content: Text('${item.name} deleted',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      } else {
+        messenger.showSnackBar(SnackBar(
+          content: Text(res['error']?.toString() ?? 'Delete failed',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Delete failed. Try again.',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ));
+    }
   }
 
   void _showAdjustSheet(StockItem item) {
@@ -546,8 +685,10 @@ class _StockList extends StatelessWidget {
   final IconData emptyIcon;
   final bool canAdjust;
   final bool canEdit;
+  final bool canDelete;
   final void Function(StockItem)? onAdjust;
   final void Function(StockItem)? onEdit;
+  final void Function(StockItem)? onDelete;
 
   const _StockList({
     required this.items,
@@ -557,8 +698,10 @@ class _StockList extends StatelessWidget {
     this.emptyIcon = Icons.inventory_2_outlined,
     this.canAdjust = false,
     this.canEdit = false,
+    this.canDelete = false,
     this.onAdjust,
     this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -569,13 +712,14 @@ class _StockList extends StatelessWidget {
     }
     final resp = Responsive.of(context);
     if (resp.isTablet) {
+      final cols = resp.isLargeTablet ? 3 : 2;
       return GridView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: resp.isLargeTablet ? 3 : 2,
+          crossAxisCount: cols,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.55,
+          mainAxisExtent: 210, // fixed height — no aspect-ratio overflow
         ),
         itemCount: items.length,
         itemBuilder: (_, i) => StaggeredItem(
@@ -583,8 +727,10 @@ class _StockList extends StatelessWidget {
           controller: listCtrl,
           child: _StockCard(
             item: items[i],
+            isTablet: true,
             onAdjust: canAdjust ? () => onAdjust?.call(items[i]) : null,
             onEdit: canEdit ? () => onEdit?.call(items[i]) : null,
+            onDelete: canDelete ? () => onDelete?.call(items[i]) : null,
           ),
         ),
       );
@@ -599,6 +745,7 @@ class _StockList extends StatelessWidget {
           item: items[i],
           onAdjust: canAdjust ? () => onAdjust?.call(items[i]) : null,
           onEdit: canEdit ? () => onEdit?.call(items[i]) : null,
+          onDelete: canDelete ? () => onDelete?.call(items[i]) : null,
         ),
       ),
     );
@@ -608,9 +755,11 @@ class _StockList extends StatelessWidget {
 // ── Premium stock card ────────────────────────────────────────────────────────
 class _StockCard extends StatelessWidget {
   final StockItem item;
+  final bool isTablet;
   final VoidCallback? onAdjust;
   final VoidCallback? onEdit;
-  const _StockCard({required this.item, this.onAdjust, this.onEdit});
+  final VoidCallback? onDelete;
+  const _StockCard({required this.item, this.isTablet = false, this.onAdjust, this.onEdit, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +777,7 @@ class _StockCard extends StatelessWidget {
         : isLow ? AppColors.warning : AppColors.primary;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: isTablet ? EdgeInsets.zero : const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -752,7 +901,7 @@ class _StockCard extends StatelessWidget {
         ),
 
         // ── Action buttons ─────────────────────────────────────────────────
-        if (onAdjust != null || onEdit != null)
+        if (onAdjust != null || onEdit != null || onDelete != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Row(children: [
@@ -805,6 +954,22 @@ class _StockCard extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (onDelete != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.25))),
+                    child: Icon(Icons.delete_outline_rounded,
+                      color: Colors.red.shade400, size: 16),
+                  ),
+                ),
+              ],
             ]),
           )
         else
@@ -3275,6 +3440,13 @@ class _ProductPickerSheet extends StatefulWidget {
   @override State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
 }
 
+Widget _productIconBox() => Container(
+  width: 36, height: 36,
+  decoration: BoxDecoration(
+    color: AppColors.primary.withValues(alpha: 0.08),
+    borderRadius: BorderRadius.circular(10)),
+  child: const Icon(Icons.inventory_2_rounded, size: 17, color: AppColors.primary));
+
 class _ProductPickerSheetState extends State<_ProductPickerSheet> {
   final _ctrl = TextEditingController();
   List<StockItem> _filtered = [];
@@ -3367,13 +3539,16 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: AppColors.border)),
                       child: Row(children: [
-                        Container(
-                          width: 36, height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.inventory_2_rounded,
-                            size: 17, color: AppColors.primary)),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: p.imageUrl.isNotEmpty
+                            ? Image.network(
+                                p.imageUrl.startsWith('http')
+                                    ? p.imageUrl
+                                    : '${ApiService.baseUrl}/${p.imageUrl}',
+                                width: 36, height: 36, fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _productIconBox())
+                            : _productIconBox()),
                         const SizedBox(width: 12),
                         Expanded(child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3429,4 +3604,109 @@ class _TypeBtn extends StatelessWidget {
               fontSize: 11, fontWeight: FontWeight.w700,
               color: selected ? color : AppColors.textMuted)),
         ]))));
+}
+
+// ── Export Format Sheet ───────────────────────────────────────────────────────
+class _ExportSheet extends StatelessWidget {
+  final String title;
+  final void Function(String format) onExport;
+  const _ExportSheet({required this.title, required this.onExport});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+    decoration: BoxDecoration(
+      color: AppColors.surface, borderRadius: BorderRadius.circular(24)),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Center(
+        child: Container(
+          margin: const EdgeInsets.only(top: 12, bottom: 4),
+          width: 36, height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.border, borderRadius: BorderRadius.circular(2)))),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.download_rounded, size: 18, color: AppColors.accent)),
+          const SizedBox(width: 10),
+          Text(title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 15, fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary)),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Text('Choose export format. CSV opens in Excel/Sheets. HTML can be saved as PDF from your browser.',
+          style: GoogleFonts.inter(
+            fontSize: 12, color: AppColors.textMuted))),
+      const SizedBox(height: 14),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(children: [
+          Expanded(child: _ExportFormatTile(
+            icon: Icons.table_chart_rounded,
+            label: 'CSV / Excel',
+            subtitle: 'Opens in Excel or Sheets',
+            color: const Color(0xFF16A34A),
+            onTap: () => onExport('csv'),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: _ExportFormatTile(
+            icon: Icons.picture_as_pdf_rounded,
+            label: 'HTML / PDF',
+            subtitle: 'Open in browser → Print',
+            color: const Color(0xFFDC2626),
+            onTap: () => onExport('html'),
+          )),
+        ]),
+      ),
+      const SizedBox(height: 20),
+    ]),
+  );
+}
+
+class _ExportFormatTile extends StatelessWidget {
+  final IconData icon;
+  final String label, subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  const _ExportFormatTile({
+    required this.icon, required this.label, required this.subtitle,
+    required this.color, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.2))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: color)),
+        const SizedBox(height: 10),
+        Text(label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13, fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary)),
+        const SizedBox(height: 2),
+        Text(subtitle,
+          style: GoogleFonts.inter(
+            fontSize: 10, color: AppColors.textMuted)),
+      ]),
+    ),
+  );
 }

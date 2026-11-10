@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -91,6 +92,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+    if (isTablet) return _buildTabletLayout(context);
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: NestedScrollView(
@@ -236,6 +239,257 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ) : null,
     );
   }
+
+  // ── Tablet premium layout ────────────────────────────────────────────────────
+  Widget _buildTabletLayout(BuildContext context) {
+    final resp = Responsive.of(context);
+    final periodLabel = switch (_filter) {
+      'today' => "Today's Expenses",
+      'week'  => "This Week's Expenses",
+      'all'   => "All Expenses",
+      _       => "This Month's Expenses",
+    };
+    final avg = (_count > 0) ? _fmtMoney(_total / _count) : 'TZS 0';
+
+    Future<void> openAddSheet() async {
+      await _loadCategories();
+      if (!context.mounted) return;
+      final added = await showDialog<bool>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        builder: (_) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540, maxHeight: 720),
+            child: _AddExpenseSheet(categories: _categories, isTablet: true),
+          ),
+        ),
+      );
+      if (added == true) _load();
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: Column(children: [
+        // ── Premium header ────────────────────────────────────────────
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF07180C), Color(0xFF0F2D1A), Color(0xFF1A4A2E)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight)),
+          child: SafeArea(bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                // Nav row
+                Row(children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18))),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white, size: 16))),
+                  const SizedBox(width: 14),
+                  Expanded(child: Text('Expenses',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 22, fontWeight: FontWeight.w900,
+                      color: Colors.white, letterSpacing: -0.4))),
+                  if (_canAddExpense)
+                    GestureDetector(
+                      onTap: openAddSheet,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFE8945A), Color(0xFFF4A261)]),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [BoxShadow(
+                            color: AppColors.accent.withValues(alpha: 0.35),
+                            blurRadius: 10, offset: const Offset(0, 4))]),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.add_rounded,
+                            color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Add Expense',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13, fontWeight: FontWeight.w800,
+                              color: Colors.white)),
+                        ]))),
+                ]),
+                const SizedBox(height: 18),
+                // Total amount
+                Text(periodLabel,
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w500, letterSpacing: 0.5)),
+                const SizedBox(height: 4),
+                Text(_fmtMoney(_total),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 30, fontWeight: FontWeight.w900,
+                    color: Colors.white, letterSpacing: -0.8)),
+                const SizedBox(height: 14),
+                // KPI tiles row
+                Row(children: [
+                  _ExpKpi(
+                    icon: Icons.receipt_long_rounded,
+                    value: '$_count',
+                    label: 'expenses'),
+                  const SizedBox(width: 10),
+                  _ExpKpi(
+                    icon: Icons.bar_chart_rounded,
+                    value: avg,
+                    label: 'average'),
+                  const SizedBox(width: 10),
+                  _ExpKpi(
+                    icon: Icons.calendar_today_rounded,
+                    value: _filter == 'today' ? 'Today'
+                        : _filter == 'week' ? 'Week'
+                        : _filter == 'all' ? 'All time' : 'Month',
+                    label: 'period'),
+                ]),
+              ]),
+            )),
+        ),
+
+        // ── Filter bar ────────────────────────────────────────────────
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: _filters.map((f) {
+              final sel = _filter == f.$1;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (_filter == f.$1) return;
+                    setState(() => _filter = f.$1);
+                    _load();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: sel
+                          ? const LinearGradient(
+                              colors: [Color(0xFF0F2D1A), Color(0xFF1A4A2E)])
+                          : null,
+                      color: sel ? null : const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: sel ? [BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.2),
+                        blurRadius: 6, offset: const Offset(0, 2))] : [],
+                    ),
+                    child: Center(child: Text(f.$2,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: sel ? Colors.white : AppColors.textMuted))),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // ── Expense list / grid ────────────────────────────────────────
+        Expanded(
+          child: _loading
+              ? GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: resp.isLargeTablet ? 2 : 1,
+                    crossAxisSpacing: 12, mainAxisSpacing: 10,
+                    mainAxisExtent: 80),
+                  itemCount: 6,
+                  itemBuilder: (_, __) => Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16)),
+                    child: const SizedBox()))
+              : _error != null
+                  ? Center(child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.red),
+                        const SizedBox(height: 14),
+                        Text(_error!, textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 13, color: AppColors.textMuted)),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)))),
+                      ])))
+                  : _expenses.isEmpty
+                      ? _EmptyState()
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          color: AppColors.primary,
+                          child: GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: resp.isLargeTablet ? 2 : 1,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 10,
+                              mainAxisExtent: 80,
+                            ),
+                            itemCount: _expenses.length,
+                            itemBuilder: (_, i) => _ExpenseCard(
+                              expense: _expenses[i],
+                              isTablet: true,
+                              fmtMoney: _fmtMoney,
+                              fmtDate: _fmtDate,
+                            ),
+                          )),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Tablet KPI tile ───────────────────────────────────────────────────────────
+class _ExpKpi extends StatelessWidget {
+  final IconData icon;
+  final String value, label;
+  const _ExpKpi({required this.icon, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15))),
+      child: Row(children: [
+        Icon(icon, color: Colors.white.withValues(alpha: 0.7), size: 16),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13, fontWeight: FontWeight.w900, color: Colors.white),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(label,
+            style: GoogleFonts.inter(
+              fontSize: 9, color: Colors.white.withValues(alpha: 0.6),
+              fontWeight: FontWeight.w500, letterSpacing: 0.3)),
+        ])),
+      ]),
+    ),
+  );
 }
 
 // ── Summary strip ─────────────────────────────────────────────────────────────
@@ -305,10 +559,12 @@ class _SummaryStrip extends StatelessWidget {
 // ── Expense card ──────────────────────────────────────────────────────────────
 class _ExpenseCard extends StatelessWidget {
   final Map<String, dynamic> expense;
+  final bool isTablet;
   final String Function(dynamic) fmtMoney;
   final String Function(String?) fmtDate;
   const _ExpenseCard({
-    required this.expense, required this.fmtMoney, required this.fmtDate});
+    required this.expense, this.isTablet = false,
+    required this.fmtMoney, required this.fmtDate});
 
   @override
   Widget build(BuildContext context) {
@@ -317,8 +573,10 @@ class _ExpenseCard extends StatelessWidget {
     final note    = expense['note'] as String?;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
+      margin: isTablet ? EdgeInsets.zero : const EdgeInsets.only(bottom: 10),
+      padding: isTablet
+          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
+          : const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -419,7 +677,8 @@ class _EmptyState extends StatelessWidget {
 // ── Add expense sheet ─────────────────────────────────────────────────────────
 class _AddExpenseSheet extends StatefulWidget {
   final List<Map<String, dynamic>> categories;
-  const _AddExpenseSheet({required this.categories});
+  final bool isTablet;
+  const _AddExpenseSheet({required this.categories, this.isTablet = false});
   @override
   State<_AddExpenseSheet> createState() => _AddExpenseSheetState();
 }
@@ -509,52 +768,96 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    return Container(
-      margin: EdgeInsets.only(top: mq.padding.top + 40),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      child: Column(children: [
-        // Handle
-        const SizedBox(height: 10),
-        Container(
-          width: 36, height: 4,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(2))),
-        const SizedBox(height: 14),
+    final isTablet = widget.isTablet;
+    final outerRadius = isTablet
+        ? BorderRadius.circular(28)
+        : const BorderRadius.vertical(top: Radius.circular(28));
 
-        // Header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(children: [
-            Container(
-              width: 38, height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10)),
-              child: Icon(Icons.add_card_rounded,
-                  color: AppColors.primary, size: 20)),
-            const SizedBox(width: 12),
-            Text('Record Expense',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 17, fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary)),
-            const Spacer(),
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: 32, height: 32,
+    return Container(
+      margin: isTablet ? EdgeInsets.zero : EdgeInsets.only(top: mq.padding.top + 40),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: outerRadius),
+      child: Column(children: [
+        // Header — premium gradient on tablet, plain on phone
+        if (isTablet)
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF07180C), Color(0xFF0F2D1A), Color(0xFF1A4A2E)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 14, offset: const Offset(0, 5))]),
+            child: Row(children: [
+              Container(
+                width: 42, height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.close_rounded,
-                    size: 16, color: Color(0xFF6B7280))),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 16),
-        const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(13)),
+                child: const Icon(Icons.add_card_rounded,
+                  color: Colors.white, size: 22)),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Record Expense',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 17, fontWeight: FontWeight.w900,
+                    color: Colors.white, letterSpacing: -0.3)),
+                Text('Track your business spending',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: Colors.white.withValues(alpha: 0.6))),
+              ])),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 18))),
+            ]))
+        else ...[
+          // Phone: drag handle + plain header
+          const SizedBox(height: 10),
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.add_card_rounded,
+                  color: AppColors.primary, size: 20)),
+              const SizedBox(width: 12),
+              Text('Record Expense',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.close_rounded,
+                    size: 16, color: Color(0xFF6B7280)))),
+            ])),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+        ],
 
         Expanded(
           child: SingleChildScrollView(

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
+import '../utils/responsive.dart';
 import '../widgets/common_widgets.dart';
 
 // Mobile-relevant modules grouped for permissions UI
@@ -120,15 +121,35 @@ class _UsersScreenState extends State<UsersScreen>
   }
 
   void _openResetPassword(Map<String, dynamic> user) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ResetPasswordSheet(
-        user: user,
-        onSaved: () => _showSnack('Password reset successfully!', AppColors.success),
-      ),
-    );
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+    if (isTablet) {
+      showDialog(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.55),
+        builder: (_) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: _ResetPasswordSheet(
+              isTablet: true,
+              user: user,
+              onSaved: () => _showSnack('Password reset successfully!', AppColors.success),
+            ),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _ResetPasswordSheet(
+          user: user,
+          onSaved: () => _showSnack('Password reset successfully!', AppColors.success),
+        ),
+      );
+    }
   }
 
   Future<void> _deleteUser(Map<String, dynamic> user) async {
@@ -306,22 +327,51 @@ class _UsersScreenState extends State<UsersScreen>
                   : RefreshIndicator(
                       onRefresh: _load,
                       color: AppColors.primary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                        itemCount: _users.length,
-                        itemBuilder: (_, i) => StaggeredItem(
-                          index: i, controller: _listCtrl,
-                          child: _UserCard(
-                            user: _users[i],
-                            roleColor: _roleColor(_users[i]['role'] ?? ''),
-                            roleLabel: _roleLabel(_users[i]['role'] ?? ''),
-                            onPermissions: () => _openPermissions(_users[i]),
-                            onToggle: () => _toggleStatus(_users[i]),
-                            onEdit: () => _openEdit(_users[i]),
-                            onDelete: () => _deleteUser(_users[i]),
-                            onResetPassword: () => _openResetPassword(_users[i]),
-                          )),
-                      )),
+                      child: Builder(builder: (ctx) {
+                        final resp = Responsive.of(ctx);
+                        if (resp.isTablet) {
+                          final cols = resp.isLargeTablet ? 3 : 2;
+                          return GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: cols,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              mainAxisExtent: 240,
+                            ),
+                            itemCount: _users.length,
+                            itemBuilder: (_, i) => StaggeredItem(
+                              index: i, controller: _listCtrl,
+                              child: _UserCard(
+                                user: _users[i],
+                                isTablet: true,
+                                roleColor: _roleColor(_users[i]['role'] ?? ''),
+                                roleLabel: _roleLabel(_users[i]['role'] ?? ''),
+                                onPermissions: () => _openPermissions(_users[i]),
+                                onToggle: () => _toggleStatus(_users[i]),
+                                onEdit: () => _openEdit(_users[i]),
+                                onDelete: () => _deleteUser(_users[i]),
+                                onResetPassword: () => _openResetPassword(_users[i]),
+                              )),
+                          );
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                          itemCount: _users.length,
+                          itemBuilder: (_, i) => StaggeredItem(
+                            index: i, controller: _listCtrl,
+                            child: _UserCard(
+                              user: _users[i],
+                              roleColor: _roleColor(_users[i]['role'] ?? ''),
+                              roleLabel: _roleLabel(_users[i]['role'] ?? ''),
+                              onPermissions: () => _openPermissions(_users[i]),
+                              onToggle: () => _toggleStatus(_users[i]),
+                              onEdit: () => _openEdit(_users[i]),
+                              onDelete: () => _deleteUser(_users[i]),
+                              onResetPassword: () => _openResetPassword(_users[i]),
+                            )),
+                        );
+                      })),
         ),
       ]),
     );
@@ -333,16 +383,169 @@ class _UserCard extends StatelessWidget {
   final Map<String, dynamic> user;
   final Color roleColor;
   final String roleLabel;
+  final bool isTablet;
   final VoidCallback onPermissions, onToggle, onEdit, onDelete, onResetPassword;
 
   const _UserCard({
     required this.user, required this.roleColor, required this.roleLabel,
+    this.isTablet = false,
     required this.onPermissions, required this.onToggle,
     required this.onEdit, required this.onDelete, required this.onResetPassword,
   });
 
+  Widget _buildTabletCard() {
+    final isActive   = user['is_active'].toString() == '1';
+    final configured = user['is_configured'].toString() == '1';
+    final permCount  = int.tryParse(user['perm_count']?.toString() ?? '0') ?? 0;
+    final name       = user['name'] as String? ?? '';
+    final email      = user['email'] as String? ?? '';
+    final branch     = user['branch_name'] as String? ?? '';
+
+    return Container(
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isActive ? AppColors.border : AppColors.danger.withValues(alpha: 0.2)),
+        boxShadow: [BoxShadow(
+          color: roleColor.withValues(alpha: 0.08),
+          blurRadius: 16, offset: const Offset(0, 4))]),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Gradient header band with avatar ──────────────────────────
+          Container(
+            height: 70,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [roleColor, roleColor.withValues(alpha: 0.6)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight)),
+            child: Stack(children: [
+              Positioned.fill(child: Center(
+                child: Container(
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.5), width: 2.5)),
+                  child: Center(child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20, fontWeight: FontWeight.w900,
+                      color: Colors.white)))))),
+              if (!isActive)
+                Positioned(top: 7, right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger, borderRadius: BorderRadius.circular(20)),
+                    child: Text('Inactive',
+                      style: GoogleFonts.inter(
+                        fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white)))),
+            ])),
+          // ── Body ──────────────────────────────────────────────────────
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // User info
+                  Column(children: [
+                    Text(name,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13.5, fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary, letterSpacing: -0.2),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: roleColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20)),
+                      child: Text(roleLabel,
+                        style: GoogleFonts.inter(
+                          fontSize: 10, fontWeight: FontWeight.w800, color: roleColor))),
+                    if (branch.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(branch,
+                        style: GoogleFonts.inter(
+                          fontSize: 10, color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center),
+                    ],
+                    const SizedBox(height: 2),
+                    Text(email,
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: AppColors.textMuted.withValues(alpha: 0.75)),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center),
+                  ]),
+                  // Actions
+                  Column(children: [
+                    GestureDetector(
+                      onTap: onPermissions,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: configured
+                              ? AppColors.primary.withValues(alpha: 0.07)
+                              : AppColors.warning.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: configured
+                                ? AppColors.primary.withValues(alpha: 0.2)
+                                : AppColors.warning.withValues(alpha: 0.3))),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(
+                            configured
+                                ? Icons.verified_user_rounded
+                                : Icons.shield_outlined,
+                            size: 11,
+                            color: configured ? AppColors.primary : AppColors.warning),
+                          const SizedBox(width: 4),
+                          Text(
+                            configured ? '$permCount modules' : 'Set permissions',
+                            style: GoogleFonts.inter(
+                              fontSize: 10, fontWeight: FontWeight.w700,
+                              color: configured ? AppColors.primary : AppColors.warning)),
+                        ]))),
+                    const SizedBox(height: 8),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                      _IconBtn(icon: Icons.edit_rounded,
+                        color: AppColors.primary, onTap: onEdit),
+                      _IconBtn(icon: Icons.lock_reset_rounded,
+                        color: const Color(0xFF0891B2), onTap: onResetPassword),
+                      _IconBtn(
+                        icon: isActive
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: isActive ? AppColors.danger : AppColors.success,
+                        onTap: onToggle),
+                      _IconBtn(icon: Icons.delete_outline_rounded,
+                        color: AppColors.danger, onTap: onDelete),
+                    ]),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isTablet) return _buildTabletCard();
     final isActive   = user['is_active'].toString() == '1';
     final configured = user['is_configured'].toString() == '1';
     final permCount  = int.tryParse(user['perm_count']?.toString() ?? '0') ?? 0;
@@ -1317,7 +1520,8 @@ class _EditUserSheetState extends State<_EditUserSheet> {
 class _ResetPasswordSheet extends StatefulWidget {
   final Map<String, dynamic> user;
   final VoidCallback onSaved;
-  const _ResetPasswordSheet({required this.user, required this.onSaved});
+  final bool isTablet;
+  const _ResetPasswordSheet({required this.user, required this.onSaved, this.isTablet = false});
 
   @override
   State<_ResetPasswordSheet> createState() => _ResetPasswordSheetState();
@@ -1361,20 +1565,27 @@ class _ResetPasswordSheetState extends State<_ResetPasswordSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = widget.isTablet
+        ? BorderRadius.circular(28)
+        : const BorderRadius.vertical(top: Radius.circular(28));
+    final bottomPad = widget.isTablet ? 0.0 : MediaQuery.of(context).viewInsets.bottom;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: bottomPad),
       child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.65),
-        decoration: const BoxDecoration(
+        constraints: widget.isTablet
+            ? null
+            : BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.65),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+          borderRadius: borderRadius),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
             padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [Color(0xFF0891B2), Color(0xFF0E7490)]),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: borderRadius,
               boxShadow: [BoxShadow(
                 color: const Color(0xFF0891B2).withValues(alpha: 0.25),
                 blurRadius: 12, offset: const Offset(0, 4))]),

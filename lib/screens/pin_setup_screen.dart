@@ -217,10 +217,13 @@ class _PinSetupScreenState extends State<PinSetupScreen>
               opacity: _entryFade,
               child: SlideTransition(
                 position: _entrySlide,
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: Column(
-                    children: [
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: Column(
+                        children: [
                       // Header with optional close button
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
@@ -440,6 +443,8 @@ class _PinSetupScreenState extends State<PinSetupScreen>
               ),
             ),
           ),
+        ),
+      ),
         ]),
       ),
     );

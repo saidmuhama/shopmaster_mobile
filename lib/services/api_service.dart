@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
@@ -203,6 +204,35 @@ class ApiService {
     return [];
   }
 
+  // ── Stock Value Summary ───────────────────────────────────────────────────
+  static Future<StockValueSummary> getStockValues() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/ajax/mobile/stock_value.php'),
+      headers: _getHeaders,
+    ).timeout(_timeout);
+    final data = _decode(res);
+    if (data['ok'] == true) return StockValueSummary.fromJson(data['data']);
+    return StockValueSummary.empty();
+  }
+
+  // ── Export (CSV / HTML) ───────────────────────────────────────────────────
+  // Returns a fully-formed URL that the caller can open with url_launcher
+  static String exportUrl({
+    required String type,   // stock | sales
+    required String format, // csv | html
+    String? date,
+  }) {
+    final params = {
+      'type':   type,
+      'format': format,
+      if (date != null) 'date': date,
+      if (_token != null) '_token': _token!,
+    };
+    return Uri.parse('$baseUrl/ajax/mobile/export.php')
+        .replace(queryParameters: params)
+        .toString();
+  }
+
   // ── Stock ─────────────────────────────────────────────────────────────────
   static Future<List<StockItem>> getStock({
     String? search,
@@ -334,6 +364,24 @@ class ApiService {
       Uri.parse('$baseUrl/ajax/mobile/sales.php'),
       headers: _headers,
       body: body,
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> deleteSale(int saleId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/sales.php'),
+      headers: _headers,
+      body: {'action': 'delete', 'sale_id': saleId.toString()},
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
+  static Future<Map<String, dynamic>> deleteProduct(int productId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/ajax/mobile/stock.php'),
+      headers: {'Content-Type': 'application/json', ..._getHeaders},
+      body: jsonEncode({'action': 'delete_product', 'product_id': productId}),
     ).timeout(_timeout);
     return _decode(res);
   }
@@ -864,6 +912,22 @@ class ApiService {
 
   /// Returns [{slug, name, color, is_builtin}] — built-in enabled + custom methods.
   /// Falls back to hardcoded defaults on any error.
+  static Future<Map<String, dynamic>> getProductProfit({
+    String? from, String? to, int? branchId, int limit = 20,
+  }) async {
+    final q = <String, String>{
+      'from':  from  ?? DateFormat('yyyy-MM-01').format(DateTime.now()),
+      'to':    to    ?? DateFormat('yyyy-MM-dd').format(DateTime.now()),
+      'limit': limit.toString(),
+    };
+    if (branchId != null && branchId > 0) q['branch'] = branchId.toString();
+    final res = await http.get(
+      Uri.parse('$baseUrl/ajax/mobile/product_profit.php').replace(queryParameters: q),
+      headers: _getHeaders,
+    ).timeout(_timeout);
+    return _decode(res);
+  }
+
   static Future<List<Map<String, dynamic>>> getPaymentMethods() async {
     try {
       final res = await http.get(

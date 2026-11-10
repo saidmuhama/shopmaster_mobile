@@ -135,6 +135,7 @@ class StockItem {
   final double wholesalePrice;
   final double? minWholesaleQty;
   final String categoryName;
+  final String imageUrl;
 
   const StockItem({
     required this.id, required this.name, required this.sku,
@@ -142,6 +143,7 @@ class StockItem {
     required this.buyingPrice, required this.sellingPrice,
     this.wholesalePrice = 0, this.minWholesaleQty,
     required this.categoryName,
+    this.imageUrl = '',
   });
 
   bool get isLowStock => qty <= reorderLevel && reorderLevel > 0;
@@ -160,6 +162,7 @@ class StockItem {
     minWholesaleQty: j['min_wholesale_qty'] != null
         ? double.tryParse(j['min_wholesale_qty'].toString()) : null,
     categoryName: j['category_name'] ?? 'General',
+    imageUrl: j['image_url']?.toString() ?? '',
   );
 }
 
@@ -419,5 +422,68 @@ class CashierStats {
 
   factory CashierStats.empty() => const CashierStats(
     myRevenue: 0, myTransactions: 0, paymentMethods: [],
+  );
+}
+
+// ─── Stock Value Summary ──────────────────────────────────────────────────────
+class StockValueProduct {
+  final int    id;
+  final String name;
+  final String sku;
+  final double qty;
+  final double buyingPrice;
+  final double sellingPrice;
+  final double valueAtCost;
+  final double valueAtSelling;
+
+  const StockValueProduct({
+    required this.id, required this.name, required this.sku,
+    required this.qty, required this.buyingPrice, required this.sellingPrice,
+    required this.valueAtCost, required this.valueAtSelling,
+  });
+
+  factory StockValueProduct.fromJson(Map<String, dynamic> j) => StockValueProduct(
+    id:             int.tryParse(j['id']?.toString() ?? '0') ?? 0,
+    name:           j['name']?.toString() ?? '',
+    sku:            j['sku']?.toString() ?? '',
+    qty:            double.tryParse(j['qty']?.toString() ?? '0') ?? 0,
+    buyingPrice:    double.tryParse(j['buying_price']?.toString() ?? '0') ?? 0,
+    sellingPrice:   double.tryParse(j['selling_price']?.toString() ?? '0') ?? 0,
+    valueAtCost:    double.tryParse(j['value_at_cost']?.toString() ?? '0') ?? 0,
+    valueAtSelling: double.tryParse(j['value_at_selling']?.toString() ?? '0') ?? 0,
+  );
+}
+
+class StockValueSummary {
+  final double totalCostValue;
+  final double totalSellingValue;
+  final double potentialProfit;
+  final double marginPct;
+  final int    totalProducts;
+  final double totalUnits;
+  final List<StockValueProduct> topProducts;
+
+  const StockValueSummary({
+    required this.totalCostValue, required this.totalSellingValue,
+    required this.potentialProfit, required this.marginPct,
+    required this.totalProducts, required this.totalUnits,
+    required this.topProducts,
+  });
+
+  factory StockValueSummary.fromJson(Map<String, dynamic> j) => StockValueSummary(
+    totalCostValue:    double.tryParse(j['total_cost_value']?.toString()    ?? '0') ?? 0,
+    totalSellingValue: double.tryParse(j['total_selling_value']?.toString() ?? '0') ?? 0,
+    potentialProfit:   double.tryParse(j['potential_profit']?.toString()    ?? '0') ?? 0,
+    marginPct:         double.tryParse(j['margin_pct']?.toString()          ?? '0') ?? 0,
+    totalProducts:     int.tryParse(j['total_products']?.toString()         ?? '0') ?? 0,
+    totalUnits:        double.tryParse(j['total_units']?.toString()         ?? '0') ?? 0,
+    topProducts: (j['top_products'] as List<dynamic>? ?? [])
+        .map((p) => StockValueProduct.fromJson(p as Map<String, dynamic>))
+        .toList(),
+  );
+
+  factory StockValueSummary.empty() => const StockValueSummary(
+    totalCostValue: 0, totalSellingValue: 0, potentialProfit: 0,
+    marginPct: 0, totalProducts: 0, totalUnits: 0, topProducts: [],
   );
 }
