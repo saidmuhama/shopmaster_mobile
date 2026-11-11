@@ -7,6 +7,7 @@ import '../services/notification_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import 'dashboard_screen.dart';
 import 'sales_screen.dart';
 import 'stock_screen.dart';
@@ -87,12 +88,12 @@ class _HomeScreenState extends State<HomeScreen>
         const StockAdjustmentsScreen(),
         ProfileScreen(user: user),
       ];
-      const List<_NavItem> allNav = [
-        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, 'POS'),
-        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       'Sales'),
-        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   'Products'),
-        _NavItem(Icons.history_rounded,       Icons.history_outlined,       'Adjustments'),
-        _NavItem(Icons.person_rounded,        Icons.person_outlined,        'Profile'),
+      final List<_NavItem> allNav = [
+        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, context.l10n.pos),
+        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       context.l10n.sales),
+        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   context.l10n.products),
+        _NavItem(Icons.history_rounded,       Icons.history_outlined,       context.l10n.inventory),
+        _NavItem(Icons.person_rounded,        Icons.person_outlined,        context.l10n.profile),
       ];
       const List<String?> allKeys = [
         'pos', 'sales_history', 'stock', 'stock', null,
@@ -113,13 +114,13 @@ class _HomeScreenState extends State<HomeScreen>
         ReportsScreen(user: user),
         ProfileScreen(user: user),
       ];
-      const List<_NavItem> allNav = [
-        _NavItem(Icons.dashboard_rounded,     Icons.dashboard_outlined,     'Dashboard'),
-        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       'Sales'),
-        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, 'POS'),
-        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   'Stock'),
-        _NavItem(Icons.bar_chart_rounded,     Icons.bar_chart_outlined,     'Reports'),
-        _NavItem(Icons.person_rounded,        Icons.person_outlined,        'Profile'),
+      final List<_NavItem> allNav = [
+        _NavItem(Icons.dashboard_rounded,     Icons.dashboard_outlined,     context.l10n.dashboard),
+        _NavItem(Icons.receipt_rounded,       Icons.receipt_outlined,       context.l10n.sales),
+        _NavItem(Icons.point_of_sale_rounded, Icons.point_of_sale_outlined, context.l10n.pos),
+        _NavItem(Icons.inventory_2_rounded,   Icons.inventory_2_outlined,   context.l10n.stock),
+        _NavItem(Icons.bar_chart_rounded,     Icons.bar_chart_outlined,     context.l10n.reports),
+        _NavItem(Icons.person_rounded,        Icons.person_outlined,        context.l10n.profile),
       ];
       const List<String?> allKeys = [
         null, 'sales_history', 'pos', 'stock', 'report_sales', null,

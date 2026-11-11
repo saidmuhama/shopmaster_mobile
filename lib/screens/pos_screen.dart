@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import 'receipt_screen.dart';
 
 // Formats digits with commas as the user types (e.g. 25000 → 25,000)
@@ -283,12 +284,12 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
           child: const Icon(Icons.shopping_cart_outlined,
             size: 30, color: AppColors.primary)),
         const SizedBox(height: 12),
-        Text('Cart is empty',
+        Text(context.l10n.cartEmpty,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14, fontWeight: FontWeight.w800,
             color: AppColors.textPrimary)),
         const SizedBox(height: 4),
-        Text('Tap a product to add',
+        Text(context.l10n.tapProductToAdd,
           style: GoogleFonts.inter(
             fontSize: 12, color: AppColors.textMuted)),
       ]),
@@ -317,7 +318,7 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Point of Sale',
+            Text(context.l10n.pointOfSale,
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 18, fontWeight: FontWeight.w900,
@@ -537,12 +538,12 @@ class _PosScreenState extends State<PosScreen> with TickerProviderStateMixin {
                   child: const Icon(Icons.inventory_2_outlined,
                     size: 36, color: AppColors.primary)),
                 const SizedBox(height: 14),
-                Text('No products found',
+                Text(context.l10n.noProductsFound,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: resp.fs(15), fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                Text('Try a different search or category',
+                Text(context.l10n.tryDifferentSearch,
                   style: GoogleFonts.inter(
                     fontSize: resp.fs(12), color: AppColors.textMuted)),
               ]),

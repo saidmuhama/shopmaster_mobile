@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/formatter.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 import 'product_profit_screen.dart';
 
@@ -81,7 +82,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Reports',
+                      Text(context.l10n.reportsTitle,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 22, fontWeight: FontWeight.w900,
                           color: Colors.white, letterSpacing: -0.6)),
@@ -100,7 +101,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.auto_graph_rounded, color: AppColors.gold, size: 14),
                         const SizedBox(width: 6),
-                        Text('Analytics',
+                        Text(context.l10n.analytics,
                           style: GoogleFonts.inter(
                             fontSize: 11, fontWeight: FontWeight.w800,
                             color: AppColors.gold)),
@@ -259,10 +260,10 @@ class _ProfitByProductCard extends StatelessWidget {
         ),
         const SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Profit by Product', style: GoogleFonts.inter(
+          Text(context.l10n.profitByProduct, style: GoogleFonts.inter(
               fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
           const SizedBox(height: 3),
-          Text('See which products make the most profit',
+          Text(context.l10n.seeProductProfit,
               style: GoogleFonts.inter(fontSize: 11,
                   color: Colors.white.withOpacity(.7))),
         ])),
@@ -302,7 +303,7 @@ class _PnlCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
             ),
-            child: Text('This Month',
+            child: Text(context.l10n.thisMonth,
               style: GoogleFonts.inter(
                 fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.gold)),
           ),
@@ -314,7 +315,7 @@ class _PnlCard extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        Text('Net Profit',
+        Text(context.l10n.netProfitTitle,
           style: GoogleFonts.inter(
             fontSize: 11, fontWeight: FontWeight.w700,
             color: Colors.white54, letterSpacing: 0.6)),
@@ -334,10 +335,10 @@ class _PnlCard extends StatelessWidget {
 
         Row(children: [
           Expanded(child: _PnlStat(
-            'Revenue', stats.monthRevenue, currency, fmt, AppColors.accentLight)),
+            context.l10n.revenue, stats.monthRevenue, currency, fmt, AppColors.accentLight)),
           Container(width: 1, height: 44, color: Colors.white12),
           Expanded(child: _PnlStat(
-            'Expenses', stats.monthExpenses, currency, fmt,
+            context.l10n.expenses, stats.monthExpenses, currency, fmt,
             Colors.redAccent.shade100)),
         ]),
       ]),

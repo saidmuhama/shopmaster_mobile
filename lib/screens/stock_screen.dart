@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/formatter.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 import 'stock_adjustments_screen.dart';
 
@@ -141,7 +142,7 @@ class _StockScreenState extends State<StockScreen>
           } catch (_) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Could not open export. Try again.',
+                SnackBar(content: Text(context.l10n.couldNotOpenExport,
                   style: GoogleFonts.inter(fontSize: 13))));
             }
           }
@@ -161,7 +162,7 @@ class _StockScreenState extends State<StockScreen>
           _load();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Product added!',
+              content: Text(context.l10n.productAdded,
                 style: GoogleFonts.inter(
                   fontWeight: FontWeight.w600, color: Colors.white)),
               backgroundColor: AppColors.success,
@@ -185,7 +186,7 @@ class _StockScreenState extends State<StockScreen>
         foregroundColor: Colors.white,
         elevation: 4,
         icon: const Icon(Icons.add_rounded, size: 22),
-        label: Text('Add Product',
+        label: Text(context.l10n.addProduct,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 13, fontWeight: FontWeight.w800)),
       ),
@@ -221,13 +222,13 @@ class _StockScreenState extends State<StockScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Products',
+                        Text(context.l10n.products,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 22,
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
                             letterSpacing: -0.5)),
-                        Text('Manage inventory & stock levels',
+                        Text(context.l10n.manageInventory,
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -507,7 +508,7 @@ class _StockScreenState extends State<StockScreen>
           _load();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Product updated!',
+              content: Text(context.l10n.productUpdated,
                 style: GoogleFonts.inter(
                   fontWeight: FontWeight.w600, color: Colors.white)),
               backgroundColor: AppColors.success,
@@ -543,18 +544,18 @@ class _StockScreenState extends State<StockScreen>
             child: const Icon(Icons.delete_outline_rounded,
               color: Colors.red, size: 20)),
           const SizedBox(width: 12),
-          Text('Delete Product',
+          Text(context.l10n.deleteProduct,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 16, fontWeight: FontWeight.w900,
               color: AppColors.textPrimary)),
         ]),
         content: Text(
-          'Delete "${item.name}"? It will be hidden from all views. This cannot be undone.',
+          context.l10n.deleteProductConfirm,
           style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel',
+            child: Text(context.l10n.cancel,
               style: GoogleFonts.inter(fontWeight: FontWeight.w700,
                 color: AppColors.textSecondary))),
           ElevatedButton(
@@ -565,7 +566,7 @@ class _StockScreenState extends State<StockScreen>
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10))),
-            child: Text('Delete',
+            child: Text(context.l10n.delete,
               style: GoogleFonts.inter(fontWeight: FontWeight.w900))),
         ],
       ),
@@ -581,7 +582,7 @@ class _StockScreenState extends State<StockScreen>
           });
         }
         messenger.showSnackBar(SnackBar(
-          content: Text('${item.name} deleted',
+          content: Text('${item.name} ${context.l10n.deleteProductSuccess}',
             style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
           backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
@@ -590,7 +591,7 @@ class _StockScreenState extends State<StockScreen>
         ));
       } else {
         messenger.showSnackBar(SnackBar(
-          content: Text(res['error']?.toString() ?? 'Delete failed',
+          content: Text(res['error']?.toString() ?? context.l10n.deleteFailed,
             style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
@@ -600,7 +601,7 @@ class _StockScreenState extends State<StockScreen>
       }
     } catch (_) {
       messenger.showSnackBar(SnackBar(
-        content: Text('Delete failed. Try again.',
+        content: Text(context.l10n.deleteFailed,
           style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white)),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,

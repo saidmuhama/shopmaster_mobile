@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 
 // Mobile-relevant modules grouped for permissions UI
@@ -157,7 +158,7 @@ class _UsersScreenState extends State<UsersScreen>
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete User?',
+        title: Text(context.l10n.deleteUser,
           style: GoogleFonts.plusJakartaSans(
             fontWeight: FontWeight.w900, fontSize: 16)),
         content: Text(
@@ -165,9 +166,9 @@ class _UsersScreenState extends State<UsersScreen>
           style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textMuted))),
+            child: Text(context.l10n.cancel, style: GoogleFonts.inter(color: AppColors.textMuted))),
           TextButton(onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete',
+            child: Text(context.l10n.delete,
               style: GoogleFonts.inter(color: AppColors.danger, fontWeight: FontWeight.w700))),
         ],
       ),
@@ -257,7 +258,7 @@ class _UsersScreenState extends State<UsersScreen>
         foregroundColor: Colors.white,
         elevation: 4,
         icon: const Icon(Icons.person_add_rounded, size: 20),
-        label: Text('Add User',
+        label: Text(context.l10n.addUser,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 13, fontWeight: FontWeight.w800)),
       ),
@@ -287,11 +288,11 @@ class _UsersScreenState extends State<UsersScreen>
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Users & Permissions',
+                    Text(context.l10n.usersTitle,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 20, fontWeight: FontWeight.w900,
                         color: Colors.white, letterSpacing: -0.4)),
-                    Text('Manage staff access',
+                    Text(context.l10n.manageStaff,
                       style: GoogleFonts.inter(
                         fontSize: 11, color: Colors.white.withValues(alpha: 0.5),
                         fontWeight: FontWeight.w500)),
@@ -793,11 +794,11 @@ class _AddUserSheetState extends State<_AddUserSheet> {
                 child: const Icon(Icons.person_add_rounded, color: Colors.white, size: 20)),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Add New User',
+                Text(context.l10n.addNewUser,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 16, fontWeight: FontWeight.w900,
                     color: Colors.white, letterSpacing: -0.3)),
-                Text('Create a staff account',
+                Text(context.l10n.createStaffAccount,
                   style: GoogleFonts.inter(
                     fontSize: 11, color: Colors.white.withValues(alpha: 0.6))),
               ])),
@@ -957,7 +958,7 @@ class _AddUserSheetState extends State<_AddUserSheet> {
                       : Row(mainAxisSize: MainAxisSize.min, children: [
                           const Icon(Icons.check_rounded, color: Colors.white, size: 20),
                           const SizedBox(width: 8),
-                          Text('Create User',
+                          Text(context.l10n.createUser,
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 15, fontWeight: FontWeight.w900,
                               color: Colors.white, letterSpacing: -0.3)),

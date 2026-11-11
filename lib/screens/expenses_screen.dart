@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -25,11 +26,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   bool get _canAddExpense => _user?.canAccess('expenses') ?? true;
 
-  static const _filters = [
-    ('today', 'Today'),
-    ('week',  'This Week'),
-    ('month', 'This Month'),
-    ('all',   'All Time'),
+  List<(String, String)> _filterList(BuildContext context) => [
+    ('today', context.l10n.today),
+    ('week',  context.l10n.thisWeek),
+    ('month', context.l10n.thisMonth),
+    ('all',   context.l10n.allTime),
   ];
 
   @override
@@ -114,7 +115,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Expenses',
+                  Text(context.l10n.expensesTitle,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 20, fontWeight: FontWeight.w900,
                       color: Colors.white, letterSpacing: -0.3)),
@@ -141,7 +142,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(
-              children: _filters.map((f) {
+              children: _filterList(context).map((f) {
                 final sel = _filter == f.$1;
                 return Expanded(
                   child: GestureDetector(
@@ -194,7 +195,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             ElevatedButton.icon(
                               onPressed: _load,
                               icon: const Icon(Icons.refresh_rounded, size: 18),
-                              label: const Text('Retry'),
+                              label: Text(context.l10n.retry),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
@@ -233,7 +234,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
-        label: Text('Add Expense',
+        label: Text(context.l10n.addExpenseBtn,
           style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ) : null,
@@ -244,10 +245,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Widget _buildTabletLayout(BuildContext context) {
     final resp = Responsive.of(context);
     final periodLabel = switch (_filter) {
-      'today' => "Today's Expenses",
-      'week'  => "This Week's Expenses",
-      'all'   => "All Expenses",
-      _       => "This Month's Expenses",
+      'today' => context.l10n.todaysExpensesLabel,
+      'week'  => context.l10n.thisWeeksExpensesLabel,
+      'all'   => context.l10n.allExpensesLabel,
+      _       => context.l10n.thisMonthsExpensesLabel,
     };
     final avg = (_count > 0) ? _fmtMoney(_total / _count) : 'TZS 0';
 
@@ -296,7 +297,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       child: const Icon(Icons.arrow_back_ios_new_rounded,
                         color: Colors.white, size: 16))),
                   const SizedBox(width: 14),
-                  Expanded(child: Text('Expenses',
+                  Expanded(child: Text(context.l10n.expensesTitle,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 22, fontWeight: FontWeight.w900,
                       color: Colors.white, letterSpacing: -0.4))),
@@ -317,7 +318,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           const Icon(Icons.add_rounded,
                             color: Colors.white, size: 18),
                           const SizedBox(width: 6),
-                          Text('Add Expense',
+                          Text(context.l10n.addExpenseBtn,
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13, fontWeight: FontWeight.w800,
                               color: Colors.white)),
@@ -340,19 +341,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   _ExpKpi(
                     icon: Icons.receipt_long_rounded,
                     value: '$_count',
-                    label: 'expenses'),
+                    label: context.l10n.expensesCountLabel),
                   const SizedBox(width: 10),
                   _ExpKpi(
                     icon: Icons.bar_chart_rounded,
                     value: avg,
-                    label: 'average'),
+                    label: context.l10n.averageLabel),
                   const SizedBox(width: 10),
                   _ExpKpi(
                     icon: Icons.calendar_today_rounded,
-                    value: _filter == 'today' ? 'Today'
-                        : _filter == 'week' ? 'Week'
-                        : _filter == 'all' ? 'All time' : 'Month',
-                    label: 'period'),
+                    value: _filter == 'today' ? context.l10n.today
+                        : _filter == 'week' ? context.l10n.thisWeek
+                        : _filter == 'all' ? context.l10n.allTime : context.l10n.thisMonth,
+                    label: context.l10n.periodLabel),
                 ]),
               ]),
             )),
@@ -363,7 +364,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           color: Colors.white,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(
-            children: _filters.map((f) {
+            children: _filterList(context).map((f) {
               final sel = _filter == f.$1;
               return Expanded(
                 child: GestureDetector(
@@ -426,7 +427,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         ElevatedButton.icon(
                           onPressed: _load,
                           icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Retry'),
+                          label: Text(context.l10n.retry),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -502,10 +503,10 @@ class _SummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = switch (filter) {
-      'today' => "Today's Expenses",
-      'week'  => "This Week's Expenses",
-      'all'   => "All Expenses",
-      _       => "This Month's Expenses",
+      'today' => context.l10n.todaysExpensesLabel,
+      'week'  => context.l10n.thisWeeksExpensesLabel,
+      'all'   => context.l10n.allExpensesLabel,
+      _       => context.l10n.thisMonthsExpensesLabel,
     };
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -662,12 +663,12 @@ class _EmptyState extends StatelessWidget {
               size: 32, color: AppColors.primary.withValues(alpha: 0.5)),
         ),
         const SizedBox(height: 16),
-        Text('No expenses found',
+        Text(context.l10n.noExpensesMsg,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 16, fontWeight: FontWeight.w700,
             color: AppColors.textPrimary)),
         const SizedBox(height: 6),
-        Text('Tap + Add Expense to record one',
+        Text(context.l10n.tapToRecordExpense,
           style: GoogleFonts.inter(fontSize: 13, color: AppColors.textMuted)),
       ]),
     );
@@ -802,11 +803,11 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                   color: Colors.white, size: 22)),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Record Expense',
+                Text(context.l10n.recordExpense,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 17, fontWeight: FontWeight.w900,
                     color: Colors.white, letterSpacing: -0.3)),
-                Text('Track your business spending',
+                Text(context.l10n.trackSpending,
                   style: GoogleFonts.inter(
                     fontSize: 11, color: Colors.white.withValues(alpha: 0.6))),
               ])),
@@ -840,7 +841,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                 child: const Icon(Icons.add_card_rounded,
                   color: AppColors.primary, size: 20)),
               const SizedBox(width: 12),
-              Text('Record Expense',
+              Text(context.l10n.recordExpense,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 17, fontWeight: FontWeight.w900,
                   color: AppColors.textPrimary)),
@@ -1086,7 +1087,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                                 const Icon(Icons.save_rounded,
                                     color: Colors.white, size: 18),
                                 const SizedBox(width: 8),
-                                Text('Save Expense',
+                                Text(context.l10n.saveExpense,
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 15, fontWeight: FontWeight.w800,
                                     color: Colors.white)),

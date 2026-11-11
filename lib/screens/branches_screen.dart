@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 
 class BranchesScreen extends StatefulWidget {
@@ -111,16 +112,16 @@ class _BranchesScreenState extends State<BranchesScreen>
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Branch?',
+        title: Text(context.l10n.deleteBranch,
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 16)),
         content: Text(
           'Delete "${branch['name']}"? This cannot be undone.',
           style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.textMuted))),
+            child: Text(context.l10n.cancel, style: GoogleFonts.inter(color: AppColors.textMuted))),
           TextButton(onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete',
+            child: Text(context.l10n.delete,
               style: GoogleFonts.inter(color: AppColors.danger, fontWeight: FontWeight.w700))),
         ],
       ),
@@ -156,7 +157,7 @@ class _BranchesScreenState extends State<BranchesScreen>
         foregroundColor: Colors.white,
         elevation: 4,
         icon: const Icon(Icons.add_business_rounded, size: 20),
-        label: Text('Add Branch',
+        label: Text(context.l10n.addBranch,
           style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w800)),
       ),
       body: Column(children: [
@@ -184,11 +185,11 @@ class _BranchesScreenState extends State<BranchesScreen>
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Branch Management',
+                    Text(context.l10n.branchManagement,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 20, fontWeight: FontWeight.w900,
                         color: Colors.white, letterSpacing: -0.4)),
-                    Text('Manage locations & outlets',
+                    Text(context.l10n.manageLocations,
                       style: GoogleFonts.inter(
                         fontSize: 11, color: Colors.white.withValues(alpha: 0.5),
                         fontWeight: FontWeight.w500)),

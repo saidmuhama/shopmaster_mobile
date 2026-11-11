@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../utils/formatter.dart';
 import '../utils/animations.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 
 class SalesScreen extends StatefulWidget {
@@ -168,12 +169,12 @@ class _SalesScreenState extends State<SalesScreen>
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Sales History',
+                Text(context.l10n.salesHistoryTitle,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 18, fontWeight: FontWeight.w900,
                     color: Colors.white, letterSpacing: -0.4)),
                 if (!_loading)
-                  Text('${_sales.length} records  ·  ${_paidCount} paid',
+                  Text('${_sales.length} ${context.l10n.records}  ·  ${_paidCount} ${context.l10n.paid_count}',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: Colors.white.withValues(alpha: 0.45),
@@ -348,7 +349,7 @@ class _SalesScreenState extends State<SalesScreen>
           child: const Icon(Icons.wifi_off_rounded,
             size: 36, color: Colors.red)),
         const SizedBox(height: 14),
-        Text('Connection Error',
+        Text(context.l10n.connectionErrorTitle,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 16, fontWeight: FontWeight.w800,
             color: AppColors.textPrimary)),
@@ -359,7 +360,7 @@ class _SalesScreenState extends State<SalesScreen>
         ElevatedButton.icon(
           onPressed: _load,
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Retry'),
+          label: Text(context.l10n.retry),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -380,12 +381,12 @@ class _SalesScreenState extends State<SalesScreen>
         child: const Icon(Icons.receipt_long_outlined,
           size: 36, color: AppColors.primary)),
       const SizedBox(height: 14),
-      Text('No sales found',
+      Text(context.l10n.noSales,
         style: GoogleFonts.plusJakartaSans(
           fontSize: 16, fontWeight: FontWeight.w800,
           color: AppColors.textPrimary)),
       const SizedBox(height: 4),
-      Text('Try a different filter or time range',
+      Text(context.l10n.tryDifferentFilter,
         style: GoogleFonts.inter(fontSize: 13, color: AppColors.textMuted)),
     ]),
   );
@@ -754,7 +755,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5, color: AppColors.accent)),
               const SizedBox(width: 12),
-              Text('Deleting invoice…',
+              Text(context.l10n.deletingInvoiceMsg,
                 style: GoogleFonts.inter(
                   fontSize: 13, fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary)),
@@ -943,18 +944,18 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
             child: const Icon(Icons.delete_outline_rounded,
               color: Colors.red, size: 20)),
           const SizedBox(width: 12),
-          Text('Delete Invoice',
+          Text(context.l10n.deleteInvoice,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 16, fontWeight: FontWeight.w900,
               color: AppColors.textPrimary)),
         ]),
         content: Text(
-          'Delete invoice ${widget.sale.invoiceNo}? This will reverse all stock movements and cannot be undone.',
+          context.l10n.deleteInvoiceConfirm,
           style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel',
+            child: Text(context.l10n.cancel,
               style: GoogleFonts.inter(fontWeight: FontWeight.w700,
                 color: AppColors.textSecondary))),
           ElevatedButton(
@@ -965,7 +966,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet>
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10))),
-            child: Text('Delete',
+            child: Text(context.l10n.delete,
               style: GoogleFonts.inter(fontWeight: FontWeight.w900))),
         ],
       ),

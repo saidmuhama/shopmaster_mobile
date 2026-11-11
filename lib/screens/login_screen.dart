@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../services/pin_service.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import 'home_screen.dart';
 import 'pin_setup_screen.dart';
 import 'register_screen.dart';
@@ -247,13 +248,13 @@ class _LoginScreenState extends State<LoginScreen>
                               color: const Color(0xFF0F2D1A).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(2)))),
                         const SizedBox(height: 16),
-                        Text('Welcome back',
+                        Text(context.l10n.loginTitle,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 21, fontWeight: FontWeight.w800,
                             color: const Color(0xFF0F2D1A),
                             letterSpacing: -0.4)),
                         const SizedBox(height: 2),
-                        Text('Sign in to continue',
+                        Text(context.l10n.loginSubtitle,
                           style: GoogleFonts.inter(
                             fontSize: 13, color: const Color(0xFF6B7280))),
                         const SizedBox(height: 18),
@@ -265,8 +266,8 @@ class _LoginScreenState extends State<LoginScreen>
                           key: _emailKey,
                           controller: _emailCtrl,
                           focusNode: _emailFocus,
-                          label: 'Email address',
-                          hint: 'you@company.com',
+                          label: context.l10n.email,
+                          hint: context.l10n.emailHint,
                           icon: Icons.alternate_email_rounded,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
@@ -274,14 +275,14 @@ class _LoginScreenState extends State<LoginScreen>
                             FocusScope.of(context).requestFocus(_passFocus),
                           validator: (v) =>
                             (v?.trim().isEmpty ?? true)
-                              ? 'Email is required' : null,
+                              ? context.l10n.email : null,
                         ),
                         const SizedBox(height: 12),
                         _InputField(
                           key: _passKey,
                           controller: _passCtrl,
                           focusNode: _passFocus,
-                          label: 'Password',
+                          label: context.l10n.password,
                           hint: '••••••••',
                           icon: Icons.lock_outline_rounded,
                           obscure: _obscure,
@@ -301,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                           validator: (v) =>
                             (v?.isEmpty ?? true)
-                              ? 'Password is required' : null,
+                              ? context.l10n.password : null,
                         ),
                         const SizedBox(height: 20),
                         _SignInButton(
@@ -745,7 +746,7 @@ class _SignInButtonState extends State<_SignInButton> {
                 strokeWidth: 2.5, color: Colors.white))
           else
             Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('Sign In',
+              Text(context.l10n.signIn,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 15, fontWeight: FontWeight.w800,
                   color: Colors.white, letterSpacing: 0.3)),
@@ -891,14 +892,14 @@ class _SubExpiredDialog extends StatelessWidget {
           child: const Icon(Icons.warning_amber_rounded,
             color: Color(0xFFF59E0B), size: 30)),
         const SizedBox(height: 14),
-        Text('Subscription Expired',
+        Text(context.l10n.subscriptionExpired,
           textAlign: TextAlign.center,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 17, fontWeight: FontWeight.w800,
             color: const Color(0xFF0F2D1A))),
         const SizedBox(height: 8),
         Text(
-          message ?? 'Your subscription has expired. Please contact your administrator to renew.',
+          message ?? context.l10n.subscriptionExpiredDesc,
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13, color: const Color(0xFF6B7280), height: 1.5)),
@@ -913,7 +914,7 @@ class _SubExpiredDialog extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12))),
-            child: Text('Understood',
+            child: Text(context.l10n.ok,
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.w700, fontSize: 14))),
         ),

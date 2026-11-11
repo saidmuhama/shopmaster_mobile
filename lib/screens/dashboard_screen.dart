@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import '../widgets/common_widgets.dart';
 import 'home_screen.dart';
 import 'stock_adjustments_screen.dart';
@@ -280,7 +281,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               sales: _recentSales,
                               currency: widget.user.currency,
                               fmtFn: _fmt,
-                              label: 'Recent Sales')),
+                              label: context.l10n.recentSales)),
                         ],
                       ),
                     )),
@@ -301,7 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           sales: _recentSales,
                           currency: widget.user.currency,
                           fmtFn: _fmt,
-                          label: isCashier ? 'My Recent Sales' : 'Recent Sales')),
+                          label: isCashier ? context.l10n.myRecentSales : context.l10n.recentSales)),
                   ),
               ],
 
@@ -552,7 +553,7 @@ class _RevenueStrip extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 18),
-            Text("TODAY'S REVENUE",
+            Text(context.l10n.todaysRevenueLabel,
               style: GoogleFonts.inter(
                 fontSize: resp.isTablet ? 11 : 9, fontWeight: FontWeight.w700,
                 color: Colors.white.withValues(alpha: 0.35), letterSpacing: 1.2)),
@@ -579,7 +580,7 @@ class _RevenueStrip extends StatelessWidget {
               child: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('MONTH',
+                    Text(context.l10n.monthLabel,
                       style: GoogleFonts.inter(
                         fontSize: resp.isTablet ? 10 : 8, fontWeight: FontWeight.w800,
                         color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
@@ -599,7 +600,7 @@ class _RevenueStrip extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(left: 14),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('STATUS',
+                      Text(context.l10n.statusLabel,
                         style: GoogleFonts.inter(
                           fontSize: resp.isTablet ? 10 : 8, fontWeight: FontWeight.w800,
                           color: Colors.white.withValues(alpha: 0.3), letterSpacing: 0.8)),
@@ -609,7 +610,7 @@ class _RevenueStrip extends StatelessWidget {
                           decoration: const BoxDecoration(
                             color: Color(0xFF4ADE80), shape: BoxShape.circle)),
                         const SizedBox(width: 5),
-                        Text('Active',
+                        Text(context.l10n.activeLabel,
                           style: GoogleFonts.inter(
                             fontSize: resp.isTablet ? 15 : 13, fontWeight: FontWeight.w700,
                             color: const Color(0xFF4ADE80))),
@@ -638,7 +639,7 @@ class _RevenueStrip extends StatelessWidget {
                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Icon(Icons.add_circle_rounded, color: Colors.white, size: 16),
                   const SizedBox(width: 8),
-                  Text('New Sale',
+                  Text(context.l10n.newSaleBtn,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: resp.isTablet ? 16 : 14, fontWeight: FontWeight.w900,
                       color: Colors.white, letterSpacing: 0.1)),
@@ -950,7 +951,7 @@ class _WeeklyChart extends StatelessWidget {
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Weekly Revenue',
+                  Text(context.l10n.weeklyRevenue,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: resp.isTablet ? 17 : 15, fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary, letterSpacing: -0.4)),
@@ -1121,7 +1122,7 @@ class _RecentSales extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20)),
-              child: Text('TODAY',
+              child: Text(context.l10n.todayLabel,
                 style: GoogleFonts.inter(
                   fontSize: 9, fontWeight: FontWeight.w900,
                   color: AppColors.success, letterSpacing: 0.5)),
@@ -1244,7 +1245,7 @@ class _QuickActions extends StatelessWidget {
     final actions = isCashier ? [
       _ActionCard(
         icon: Icons.add_shopping_cart_rounded,
-        label: 'New Sale',
+        label: context.l10n.newSaleBtn,
         subtitle: 'Start a transaction',
         color: const Color(0xFF0E7C3A),
         bg: const Color(0xFFDCFCE7),
@@ -1253,7 +1254,7 @@ class _QuickActions extends StatelessWidget {
       ),
       _ActionCard(
         icon: Icons.receipt_long_rounded,
-        label: 'My Sales',
+        label: context.l10n.sales,
         subtitle: '${stats.todayTransactions} today',
         color: const Color(0xFF0369A1),
         bg: const Color(0xFFE0F2FE),
@@ -1263,7 +1264,7 @@ class _QuickActions extends StatelessWidget {
     ] : [
       _ActionCard(
         icon: Icons.receipt_long_rounded,
-        label: 'Sales',
+        label: context.l10n.sales,
         subtitle: '${stats.todayTransactions} today',
         color: const Color(0xFF0E7C3A),
         bg: const Color(0xFFDCFCE7),
@@ -1272,7 +1273,7 @@ class _QuickActions extends StatelessWidget {
       ),
       _ActionCard(
         icon: Icons.bar_chart_rounded,
-        label: 'Analytics',
+        label: context.l10n.analytics,
         subtitle: '$currency ${_k(stats.monthRevenue)}',
         color: const Color(0xFF6D28D9),
         bg: const Color(0xFFEDE9FE),
@@ -1281,7 +1282,7 @@ class _QuickActions extends StatelessWidget {
       ),
       _ActionCard(
         icon: Icons.inventory_2_rounded,
-        label: 'Inventory',
+        label: context.l10n.inventory,
         subtitle: 'Manage stock',
         color: const Color(0xFF0369A1),
         bg: AppColors.infoBg,
@@ -1290,7 +1291,7 @@ class _QuickActions extends StatelessWidget {
       ),
       _ActionCard(
         icon: Icons.warning_amber_rounded,
-        label: 'Low Stock',
+        label: context.l10n.lowStock,
         subtitle: '${stats.lowStockCount} item${stats.lowStockCount == 1 ? '' : 's'}',
         color: const Color(0xFFB45309),
         bg: AppColors.warningBg,
@@ -1318,7 +1319,7 @@ class _QuickActions extends StatelessWidget {
                 color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text('QUICK ACTIONS',
+              child: Text(context.l10n.quickActions,
                 style: GoogleFonts.inter(
                   fontSize: 9, fontWeight: FontWeight.w900,
                   color: AppColors.primary, letterSpacing: 1.2)),

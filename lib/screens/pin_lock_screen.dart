@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/pin_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 
@@ -278,7 +279,7 @@ class _PinLockScreenState extends State<PinLockScreen>
 
                       // ── PIN indicator label ───────────────────────────────────
                       Text(
-                        'ENTER PIN',
+                        context.l10n.pinLockSubtitle.toUpperCase(),
                         style: GoogleFonts.inter(
                           fontSize: 10, fontWeight: FontWeight.w800,
                           color: Colors.white.withValues(alpha: 0.25),
@@ -740,11 +741,11 @@ class _LogoutConfirmSheet extends StatelessWidget {
           border: Border.all(color: AppColors.danger.withValues(alpha: 0.2))),
         child: const Icon(Icons.logout_rounded, color: AppColors.danger, size: 24)),
       const SizedBox(height: 16),
-      Text('Sign Out?',
+      Text(context.l10n.logoutConfirm,
         style: GoogleFonts.plusJakartaSans(
           fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
       const SizedBox(height: 8),
-      Text('You will need to log in again to access the app.',
+      Text(context.l10n.logoutConfirmDesc,
         style: GoogleFonts.inter(
           fontSize: 13, fontWeight: FontWeight.w500,
           color: Colors.white.withValues(alpha: 0.5)),
@@ -759,7 +760,7 @@ class _LogoutConfirmSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14))),
-            child: Text('Cancel',
+            child: Text(context.l10n.cancel,
               style: GoogleFonts.plusJakartaSans(
                 fontWeight: FontWeight.w800,
                 color: Colors.white.withValues(alpha: 0.7))),
@@ -774,7 +775,7 @@ class _LogoutConfirmSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14))),
-            child: Text('Sign Out',
+            child: Text(context.l10n.logout,
               style: GoogleFonts.plusJakartaSans(
                 fontWeight: FontWeight.w800, color: Colors.white)),
           ),

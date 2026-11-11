@@ -11,6 +11,8 @@ import '../services/pin_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/animations.dart';
 import '../utils/responsive.dart';
+import '../utils/l10n_ext.dart';
+import '../providers/locale_provider.dart';
 import 'login_screen.dart';
 import 'pin_setup_screen.dart';
 import 'users_screen.dart';
@@ -176,10 +178,24 @@ class _ProfileScreenState extends State<ProfileScreen>
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
               ],
 
-              // ── Security ──────────────────────────────────────────────────
+              // ── Language ──────────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: StaggeredItem(
                   index: 2, controller: _ctrl,
+                  child: _Section(
+                    title: 'Language',
+                    accentColor: const Color(0xFF0EA5E9),
+                    items: [_LanguageTile()],
+                  ),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+              // ── Security ──────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: StaggeredItem(
+                  index: 3, controller: _ctrl,
                   child: _Section(
                     title: 'Security',
                     accentColor: AppColors.primary,
@@ -205,7 +221,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               // ── Notifications ─────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: StaggeredItem(
-                  index: 3, controller: _ctrl,
+                  index: 4, controller: _ctrl,
                   child: _Section(
                     title: 'Notifications',
                     accentColor: const Color(0xFF2563EB),
@@ -1857,5 +1873,170 @@ class _SelcomLogo extends StatelessWidget {
     child: Text('S', style: GoogleFonts.inter(
       fontSize: 20, fontWeight: FontWeight.w900,
       color: Colors.white)),
+  );
+}
+
+// ── Language tile ─────────────────────────────────────────────────────────────
+class _LanguageTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.localeProviderWatch;
+    final isSwahili = provider.isSwahili;
+
+    return InkWell(
+      onTap: () => _showLanguagePicker(context, provider),
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.language_rounded,
+              color: Color(0xFF0EA5E9), size: 19),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('App Language',
+                style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary)),
+              const SizedBox(height: 1),
+              Text(isSwahili ? 'Kiswahili' : 'English',
+                style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w500,
+                  color: AppColors.textMuted)),
+            ]),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8)),
+            child: Text(isSwahili ? 'SW' : 'EN',
+              style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w900,
+                color: const Color(0xFF0EA5E9))),
+          ),
+          const SizedBox(width: 6),
+          Icon(Icons.chevron_right_rounded,
+            color: AppColors.textMuted, size: 18),
+        ]),
+      ),
+    );
+  }
+
+  void _showLanguagePicker(BuildContext context, LocaleProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LanguagePickerSheet(provider: provider),
+    );
+  }
+}
+
+// ── Language picker sheet ─────────────────────────────────────────────────────
+class _LanguagePickerSheet extends StatelessWidget {
+  final LocaleProvider provider;
+  const _LanguagePickerSheet({required this.provider});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+    decoration: const BoxDecoration(
+      color: AppColors.bg,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 36, height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.border,
+          borderRadius: BorderRadius.circular(2))),
+      const SizedBox(height: 20),
+      Text('App Language',
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 18, fontWeight: FontWeight.w900,
+          color: AppColors.textPrimary)),
+      const SizedBox(height: 6),
+      Text('Lugha ya Programu',
+        style: GoogleFonts.inter(
+          fontSize: 12, color: AppColors.textMuted)),
+      const SizedBox(height: 24),
+      _LangOption(
+        flag: '🇬🇧',
+        name: 'English',
+        subtitle: 'English',
+        code: 'en',
+        selected: !provider.isSwahili,
+        onTap: () async {
+          await provider.setLocale(const Locale('en'));
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
+      const SizedBox(height: 10),
+      _LangOption(
+        flag: '🇹🇿',
+        name: 'Kiswahili',
+        subtitle: 'Swahili',
+        code: 'sw',
+        selected: provider.isSwahili,
+        onTap: () async {
+          await provider.setLocale(const Locale('sw'));
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
+    ]),
+  );
+}
+
+class _LangOption extends StatelessWidget {
+  final String flag, name, subtitle, code;
+  final bool selected;
+  final VoidCallback onTap;
+  const _LangOption({
+    required this.flag, required this.name, required this.subtitle,
+    required this.code, required this.selected, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: selected
+          ? AppColors.primary.withValues(alpha: 0.08)
+          : AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: selected ? AppColors.primary : AppColors.border,
+          width: selected ? 1.5 : 1)),
+      child: Row(children: [
+        Text(flag, style: const TextStyle(fontSize: 24)),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(name,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 15, fontWeight: FontWeight.w800,
+                color: selected ? AppColors.primary : AppColors.textPrimary)),
+            Text(subtitle,
+              style: GoogleFonts.inter(
+                fontSize: 11, color: AppColors.textMuted)),
+          ]),
+        ),
+        if (selected)
+          Container(
+            width: 22, height: 22,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle),
+            child: const Icon(Icons.check_rounded,
+              color: Colors.white, size: 14)),
+      ]),
+    ),
   );
 }

@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatter.dart' show Fmt;
+import '../utils/l10n_ext.dart';
 
 enum _SortBy { profit, revenue, margin, qty }
 
@@ -122,7 +123,7 @@ class _ProductProfitScreenState extends State<ProductProfitScreen>
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             elevation: 0,
-            title: Text('Profit by Product',
+            title: Text(context.l10n.profitByProductTitle,
               style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17)),
             actions: [
               GestureDetector(
@@ -211,7 +212,7 @@ class _DataBody extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Row(children: [
-                Text('All Products',
+                Text(context.l10n.allProducts,
                   style: GoogleFonts.inter(
                     fontSize: 15, fontWeight: FontWeight.w800,
                     color: const Color(0xFF111827))),
@@ -276,7 +277,7 @@ class _SummaryHero extends StatelessWidget {
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('NET PROFIT',
+                Text(context.l10n.netProfitLabel,
                   style: GoogleFonts.inter(
                     fontSize: 10, fontWeight: FontWeight.w700,
                     color: Colors.white.withValues(alpha: 0.4), letterSpacing: 1.1)),
@@ -311,7 +312,7 @@ class _SummaryHero extends StatelessWidget {
                     fontSize: 11, fontWeight: FontWeight.w700,
                     color: isGain ? const Color(0xFF4ADE80) : const Color(0xFFFF6B6B)))),
               const SizedBox(height: 6),
-              Text('$qty units sold',
+              Text('$qty ${context.l10n.unitsSold}',
                 style: GoogleFonts.inter(
                   fontSize: 10, color: Colors.white.withValues(alpha: 0.35))),
             ]),
@@ -323,11 +324,11 @@ class _SummaryHero extends StatelessWidget {
 
           // Revenue / Cost / Profit KPI row
           Row(children: [
-            _HeroKpi('Revenue', Fmt.money(revenue, currency: currency), const Color(0xFF93C5FD)),
+            _HeroKpi(context.l10n.revenue, Fmt.money(revenue, currency: currency), const Color(0xFF93C5FD)),
             _HeroKpiDiv(),
-            _HeroKpi('Cost',    Fmt.money(cost, currency: currency),    const Color(0xFFFCA5A5)),
+            _HeroKpi(context.l10n.costOfGoods, Fmt.money(cost, currency: currency), const Color(0xFFFCA5A5)),
             _HeroKpiDiv(),
-            _HeroKpi('Gross',   Fmt.money(profit, currency: currency),
+            _HeroKpi(context.l10n.grossProfit, Fmt.money(profit, currency: currency),
               isGain ? const Color(0xFF4ADE80) : const Color(0xFFFF6B6B)),
           ]),
         ]),
@@ -390,7 +391,7 @@ class _TopBarsSection extends StatelessWidget {
           blurRadius: 10, offset: const Offset(0, 3))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('Top Performers',
+          Text(context.l10n.topPerformers,
             style: GoogleFonts.inter(
               fontSize: 13, fontWeight: FontWeight.w800,
               color: const Color(0xFF111827))),
@@ -607,11 +608,11 @@ class _ProductRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFF3F4F6))),
             child: Row(children: [
-              _Stat('Revenue', Fmt.money(revenue, currency: currency), const Color(0xFF2563EB)),
+              _Stat(context.l10n.revenue, Fmt.money(revenue, currency: currency), const Color(0xFF2563EB)),
               _StatDiv(),
-              _Stat('Cost',    Fmt.money(cost,    currency: currency), const Color(0xFFDC2626)),
+              _Stat(context.l10n.costOfGoods, Fmt.money(cost, currency: currency), const Color(0xFFDC2626)),
               _StatDiv(),
-              _Stat('Qty Sold', '$qty units',                          const Color(0xFF6B7280)),
+              _Stat(context.l10n.qty, '$qty ${context.l10n.unitsSold}', const Color(0xFF6B7280)),
             ]),
           ),
         ]),
@@ -664,12 +665,12 @@ class _EmptyView extends StatelessWidget {
           child: const Icon(Icons.bar_chart_rounded,
             size: 32, color: Color(0xFF2D6A4F))),
         const SizedBox(height: 16),
-        Text('No sales data',
+        Text(context.l10n.noSalesData,
           style: GoogleFonts.inter(
             fontSize: 16, fontWeight: FontWeight.w700,
             color: const Color(0xFF111827))),
         const SizedBox(height: 6),
-        Text('Try a different period to see profit distribution.',
+        Text(context.l10n.tryDifferentPeriod,
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
             fontSize: 13, color: const Color(0xFF9CA3AF), height: 1.5)),
@@ -677,7 +678,7 @@ class _EmptyView extends StatelessWidget {
         TextButton.icon(
           onPressed: onPick,
           icon: const Icon(Icons.calendar_month_outlined, size: 16),
-          label: const Text('Change period'),
+          label: Text(context.l10n.changePeriod),
           style: TextButton.styleFrom(
             foregroundColor: const Color(0xFF0F2D1A),
             textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700))),
@@ -704,7 +705,7 @@ class _ErrorView extends StatelessWidget {
           child: const Icon(Icons.wifi_off_rounded,
             size: 28, color: Color(0xFFDC2626))),
         const SizedBox(height: 16),
-        Text('Couldn\'t load data',
+        Text(context.l10n.couldntLoadData,
           style: GoogleFonts.inter(
             fontSize: 16, fontWeight: FontWeight.w700,
             color: const Color(0xFF111827))),
@@ -718,7 +719,7 @@ class _ErrorView extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: Text('Retry',
+            label: Text(context.l10n.retry,
               style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F2D1A),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
+import 'generated/l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -8,6 +11,7 @@ import 'screens/pin_lock_screen.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
 import 'services/pin_service.dart';
+import 'providers/locale_provider.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -33,7 +37,12 @@ void main() async {
     debugPrint('[Notifications] init error: $e');
   }
 
-  runApp(const MDSProApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => LocaleProvider(),
+      child: const MDSProApp(),
+    ),
+  );
 }
 
 class MDSProApp extends StatefulWidget {
@@ -94,11 +103,20 @@ class _MDSProAppState extends State<MDSProApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final localeProvider = context.watch<LocaleProvider>();
     return MaterialApp(
       title: 'MDSPro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       navigatorKey: _navigatorKey,
+      locale: localeProvider.locale,
+      supportedLocales: const [Locale('en'), Locale('sw')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       routes: {
         '/login': (_) => const LoginScreen(),
       },
